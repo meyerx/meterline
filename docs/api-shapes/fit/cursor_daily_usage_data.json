@@ -1,0 +1,10 @@
+{
+  "data": [
+    {"date": "2026-10-01", "email": "dana.cole@example.com", "totalTabsShown": 120, "totalTabsAccepted": 45,
+     "acceptedLinesAdded": 310, "acceptedLinesDeleted": 40, "totalAccepts": 30, "totalRejects": 6,
+     "composerRequests": 12, "chatRequests": 4, "agentRequests": 7},
+    {"date": "2026-10-01", "email": "eli.park@example.com", "totalTabsShown": 10, "totalTabsAccepted": 2,
+     "acceptedLinesAdded": 8, "acceptedLinesDeleted": 0, "totalAccepts": 1, "totalRejects": 1,
+     "composerRequests": 0, "chatRequests": 3, "agentRequests": 0}
+  ]
+}

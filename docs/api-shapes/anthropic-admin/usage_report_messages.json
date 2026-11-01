@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-09-15T00:00:00Z",
+      "ending_at": "2026-09-16T00:00:00Z",
+      "results": [
+        {
+          "uncached_input_tokens": 1500,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 1000,
+            "ephemeral_1h_input_tokens": 500
+          },
+          "cache_read_input_tokens": 200,
+          "output_tokens": 500,
+          "server_tool_use": {
+            "web_search_requests": 10
+          },
+          "model": "model-a",
+          "api_key_id": "apikey_a",
+          "workspace_id": "wrkspc_a",
+          "service_tier": "standard",
+          "context_window": "0-200k",
+          "inference_geo": "global",
+          "speed": "standard",
+          "account_id": null,
+          "service_account_id": null
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "page_a"
+}

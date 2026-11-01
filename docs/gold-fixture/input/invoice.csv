@@ -1,0 +1,5 @@
+provider,provider_account_id,month,currency,kind,amount
+anthropic,00000000-0000-0000-0000-00000000f001,2026-05,USD,seats,451.50
+anthropic,00000000-0000-0000-0000-00000000f001,2026-05,USD,usage,63.50
+github_copilot,org:fixture-co,2026-05,USD,seats,68.75
+github_copilot,org:fixture-co,2026-05,USD,usage,1.15

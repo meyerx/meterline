@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meterline-gold"
+version = "0.1.0"
+description = "Turns meterline silver, organisation files, a price list and a policy file into per-person, per-group and per-audience datasets."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [{ name = "Xavier Meyer" }]
+keywords = ["ai", "llm", "usage", "cost", "finops", "chargeback", "reporting", "duckdb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "meterline>=0.2",
+    "duckdb>=1.5.3,<2",
+    "pydantic>=2.10,<3",
+    "PyYAML>=6.0,<7",
+    "typing_extensions>=4.12.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/meyerx/meterline"
+Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline-gold"
+Issues = "https://github.com/meyerx/meterline/issues"
+Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=17"]
+dev = ["pytest>=8", "hypothesis>=6.100", "jsonschema>=4.18", "meterline-sim>=0.1", "pytest-xdist==3.8.0", "ruff==0.17.3"]
+[project.scripts]
+meterline-gold = "meterline_gold.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+meterline_gold = ["sql/*.sql", "schemas/*.json", "examples/*.yaml", "dashboard/*.html", "audiences.json"]

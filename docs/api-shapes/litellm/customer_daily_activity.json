@@ -1,0 +1,404 @@
+{
+  "metadata": {
+    "has_more": false,
+    "page": 1,
+    "total_api_requests": 10,
+    "total_autorouter_savings_spend": 0.0,
+    "total_cache_creation_input_tokens": 100,
+    "total_cache_read_input_tokens": 600,
+    "total_completion_tokens": 300,
+    "total_compression_saved_tokens": 0,
+    "total_compression_savings_spend": 0.0,
+    "total_failed_requests": 1,
+    "total_flat_cost": 0.0,
+    "total_gateway_injected_caching_savings_spend": 0.0,
+    "total_pages": 1,
+    "total_prompt_caching_savings_spend": 0.0,
+    "total_prompt_tokens": 1200,
+    "total_response_time_ms": 4200,
+    "total_spend": 0.0123,
+    "total_successful_requests": 9,
+    "total_timed_requests": 10,
+    "total_tokens": 1500
+  },
+  "results": [
+    {
+      "breakdown": {
+        "api_keys": {
+          "key-hash-1": {
+            "metadata": {
+              "key_alias": "synthetic-key",
+              "key_exists": true,
+              "team_id": "team-a",
+              "user_email": "ada@example.com",
+              "user_id": "user-a"
+            },
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "endpoints": {
+          "/v1/chat/completions": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "entities": {
+          "entity-1": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "mcp_servers": {
+          "server-1": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "model_groups": {
+          "group-a": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "models": {
+          "model-a": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        },
+        "providers": {
+          "provider-a": {
+            "api_key_breakdown": {
+              "key-hash-1": {
+                "metadata": {
+                  "key_alias": "synthetic-key",
+                  "key_exists": true,
+                  "team_id": "team-a",
+                  "user_email": "ada@example.com",
+                  "user_id": "user-a"
+                },
+                "metrics": {
+                  "api_requests": 10,
+                  "autorouter_savings_spend": 0.0,
+                  "cache_creation_input_tokens": 100,
+                  "cache_read_input_tokens": 600,
+                  "completion_tokens": 300,
+                  "compression_saved_tokens": 0,
+                  "compression_savings_spend": 0.0,
+                  "failed_requests": 1,
+                  "flat_cost": 0.0,
+                  "gateway_injected_caching_savings_spend": 0.0,
+                  "prompt_caching_savings_spend": 0.0,
+                  "prompt_tokens": 1200,
+                  "spend": 0.0123,
+                  "successful_requests": 9,
+                  "timed_requests": 10,
+                  "total_response_time_ms": 4200,
+                  "total_tokens": 1500
+                }
+              }
+            },
+            "metadata": {},
+            "metrics": {
+              "api_requests": 10,
+              "autorouter_savings_spend": 0.0,
+              "cache_creation_input_tokens": 100,
+              "cache_read_input_tokens": 600,
+              "completion_tokens": 300,
+              "compression_saved_tokens": 0,
+              "compression_savings_spend": 0.0,
+              "failed_requests": 1,
+              "flat_cost": 0.0,
+              "gateway_injected_caching_savings_spend": 0.0,
+              "prompt_caching_savings_spend": 0.0,
+              "prompt_tokens": 1200,
+              "spend": 0.0123,
+              "successful_requests": 9,
+              "timed_requests": 10,
+              "total_response_time_ms": 4200,
+              "total_tokens": 1500
+            }
+          }
+        }
+      },
+      "date": "2026-09-15",
+      "metrics": {
+        "api_requests": 10,
+        "autorouter_savings_spend": 0.0,
+        "cache_creation_input_tokens": 100,
+        "cache_read_input_tokens": 600,
+        "completion_tokens": 300,
+        "compression_saved_tokens": 0,
+        "compression_savings_spend": 0.0,
+        "failed_requests": 1,
+        "flat_cost": 0.0,
+        "gateway_injected_caching_savings_spend": 0.0,
+        "prompt_caching_savings_spend": 0.0,
+        "prompt_tokens": 1200,
+        "spend": 0.0123,
+        "successful_requests": 9,
+        "timed_requests": 10,
+        "total_response_time_ms": 4200,
+        "total_tokens": 1500
+      }
+    }
+  ]
+}

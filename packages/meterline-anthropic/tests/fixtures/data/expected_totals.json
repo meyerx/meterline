@@ -1,0 +1,224 @@
+{
+  "cost_by_actor_model": {
+    "user-001": {
+      "model-a-large": "712.74008475",
+      "model-b-small": "33.95458700"
+    },
+    "user-002": {
+      "model-b-small": "35.78530480",
+      "model-c-mid": "552.97567050"
+    },
+    "user-003": {
+      "model-a-large": "43.84164780",
+      "model-b-small": "17.09506605",
+      "model-c-mid": "240.25137975"
+    },
+    "user-004": {
+      "model-b-small": "30.24560700"
+    },
+    "user-005": {
+      "model-a-large": "204.07345965",
+      "model-b-small": "68.36560500",
+      "model-c-mid": "1089.23654325"
+    },
+    "user-006": {
+      "model-c-mid": "586.20592875"
+    },
+    "user-007": {
+      "model-a-large": "29.91842550",
+      "model-c-mid": "239.06283525"
+    },
+    "user-008": {
+      "model-b-small": "25.39683440"
+    },
+    "user-009": {
+      "model-a-large": "95.81376735",
+      "model-b-small": "21.28522775",
+      "model-c-mid": "391.61486850"
+    },
+    "user-010": {
+      "model-a-large": "142.80363570",
+      "model-b-small": "21.33932795",
+      "model-c-mid": "345.21911025"
+    },
+    "user-011": {
+      "model-a-large": "92.03171280",
+      "model-c-mid": "1086.58844625"
+    },
+    "user-012": {
+      "model-b-small": "26.66865325",
+      "model-c-mid": "997.16442300"
+    },
+    "user-013": {
+      "model-a-large": "85.08773970",
+      "model-b-small": "27.73843810",
+      "model-c-mid": "536.29147125"
+    },
+    "user-014": {
+      "model-a-large": "74.42173440",
+      "model-b-small": "53.53703775",
+      "model-c-mid": "366.92469450"
+    },
+    "user-015": {
+      "model-a-large": "91.15811820",
+      "model-c-mid": "561.50821650"
+    },
+    "user-016": {
+      "model-a-large": "84.34776615",
+      "model-b-small": "31.34298550",
+      "model-c-mid": "514.33457925"
+    },
+    "user-017": {
+      "model-a-large": "120.99400860",
+      "model-b-small": "39.44242765"
+    },
+    "user-018": {
+      "model-c-mid": "743.19587550"
+    },
+    "user-019": {
+      "model-a-large": "108.76178805",
+      "model-b-small": "34.53730420"
+    },
+    "user-020": {
+      "model-a-large": "101.12733975",
+      "model-b-small": "81.89678200",
+      "model-c-mid": "559.63650975"
+    },
+    "user-021": {
+      "model-b-small": "72.30653840",
+      "model-c-mid": "375.60173625"
+    },
+    "user-022": {
+      "model-a-large": "220.99975575",
+      "model-b-small": "76.68058065",
+      "model-c-mid": "1166.81054400"
+    },
+    "user-023": {
+      "model-c-mid": "374.65292400"
+    },
+    "user-024": {
+      "model-a-large": "54.70125150",
+      "model-c-mid": "336.25661250"
+    },
+    "user-025": {
+      "model-a-large": "138.46143585",
+      "model-b-small": "41.75395065",
+      "model-c-mid": "279.66102675"
+    },
+    "user-026": {
+      "model-a-large": "190.54822260",
+      "model-b-small": "67.37982130",
+      "model-c-mid": "948.04513500"
+    },
+    "user-027": {
+      "model-a-large": "94.92002385",
+      "model-b-small": "36.62230225"
+    },
+    "user-028": {
+      "model-a-large": "104.13717975",
+      "model-c-mid": "486.78154875"
+    },
+    "user-029": {
+      "model-a-large": "108.34490535",
+      "model-b-small": "58.21915730",
+      "model-c-mid": "1098.44411100"
+    },
+    "user-030": {
+      "model-a-large": "48.49264275",
+      "model-b-small": "37.32417810",
+      "model-c-mid": "615.80871975"
+    },
+    "user-031": {
+      "model-c-mid": "556.46622525"
+    },
+    "user-032": {
+      "model-b-small": "35.40495845",
+      "model-c-mid": "590.42190300"
+    },
+    "user-033": {
+      "model-a-large": "103.07037135",
+      "model-b-small": "76.65841815",
+      "model-c-mid": "1011.79866900"
+    },
+    "user-034": {
+      "model-a-large": "103.36036905",
+      "model-b-small": "28.18571710"
+    },
+    "user-035": {
+      "model-a-large": "60.19042665",
+      "model-c-mid": "310.10041875"
+    },
+    "user-036": {
+      "model-a-large": "93.09473460",
+      "model-b-small": "20.41469405"
+    },
+    "user-037": {
+      "model-a-large": "150.37592940",
+      "model-b-small": "41.15229095",
+      "model-c-mid": "513.98480775"
+    },
+    "user-038": {
+      "model-a-large": "94.13341800",
+      "model-c-mid": "506.37925125"
+    },
+    "user-039": {
+      "model-a-large": "62.94642795",
+      "model-b-small": "49.41449125",
+      "model-c-mid": "338.71017225"
+    },
+    "user-040": {
+      "model-a-large": "113.33006160",
+      "model-c-mid": "1324.97847450"
+    },
+    "user-041": {
+      "model-a-large": "59.89739520",
+      "model-b-small": "21.45937700",
+      "model-c-mid": "393.69442425"
+    },
+    "user-042": {
+      "model-a-large": "107.47465830",
+      "model-b-small": "38.68516760"
+    },
+    "user-043": {
+      "model-a-large": "100.86239340",
+      "model-b-small": "34.52959020",
+      "model-c-mid": "520.29062175"
+    },
+    "user-044": {
+      "model-a-large": "163.08571410",
+      "model-b-small": "62.33594820",
+      "model-c-mid": "1011.35467500"
+    },
+    "user-045": {
+      "model-a-large": "79.67227350",
+      "model-b-small": "33.55012435",
+      "model-c-mid": "470.19029025"
+    },
+    "user-046": {
+      "model-a-large": "52.08318975",
+      "model-c-mid": "369.86336400"
+    },
+    "user-047": {
+      "model-a-large": "59.22046425",
+      "model-b-small": "22.81680765",
+      "model-c-mid": "201.27663075"
+    },
+    "user-048": {
+      "model-a-large": "118.70293980",
+      "model-b-small": "20.59436365",
+      "model-c-mid": "632.54526900"
+    },
+    "user-049": {
+      "model-a-large": "43.45932855",
+      "model-b-small": "9.94192430",
+      "model-c-mid": "325.11284625"
+    },
+    "user-050": {
+      "model-a-large": "30.40952145",
+      "model-b-small": "18.37965975",
+      "model-c-mid": "410.55611550"
+    }
+  },
+  "currency": "USD",
+  "unit": "major currency units (cents / 100)"
+}

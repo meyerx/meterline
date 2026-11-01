@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meterline-litellm"
+version = "0.1.0"
+description = "Reads a LiteLLM proxy's admin API and emits meterline records."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [{ name = "Xavier Meyer" }]
+keywords = ["ai", "llm", "usage", "cost", "tokens", "finops", "litellm", "proxy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+]
+requires-python = ">=3.10"
+dependencies = ["meterline>=0.2", "httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://github.com/meyerx/meterline"
+Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline-litellm"
+Issues = "https://github.com/meyerx/meterline/issues"
+Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=17"]
+dev = ["pytest>=8", "pytest-xdist==3.8.0", "ruff==0.17.3"]
+[project.scripts]
+meterline-litellm = "meterline_litellm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

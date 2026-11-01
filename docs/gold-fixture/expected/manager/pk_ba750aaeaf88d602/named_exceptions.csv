@@ -1,0 +1,2 @@
+schema_version,month,rule_id,audience,person_key,manager_key,condition,threshold,value
+2.0,2026-05,NX2,manager,pk_6e534a982f382221,pk_ba750aaeaf88d602,spike_events_at_least,1,1

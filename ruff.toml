@@ -1,0 +1,21 @@
+# Lint configuration of the repository (ruff 0.17.3). tools/test_lint.py runs it over
+# packages/*/src; a finding is fixed, or suppressed on its line as `# noqa: <code> - <reason>`.
+target-version = "py310"
+line-length = 150  # the code base's own limit; 88 would rewrap thousands of lines for no reader gain
+
+[lint]
+select = ["E", "F", "B", "UP", "S", "SIM", "C90", "DTZ"]
+ignore = [
+    # Spelling only, no behaviour: the code base writes typing.List / Dict / Optional / Union and
+    # %-formatting throughout. Rewriting about a thousand lines would change nothing a test can see
+    # and would collide with every open branch; a later sweep can turn these on.
+    "UP006",  # typing.List -> list
+    "UP007",  # Union[X, Y] -> X | Y
+    "UP035",  # deprecated typing imports
+    "UP045",  # Optional[X] -> X | None
+    "UP031",  # printf-style string formatting
+]
+
+[lint.mccabe]
+max-complexity = 20
+

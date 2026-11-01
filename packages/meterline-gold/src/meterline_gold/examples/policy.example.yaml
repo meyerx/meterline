@@ -1,0 +1,64 @@
+policy_format: 1
+name: example-policy
+label: "Invented example policy for meterline-gold. Every value is made up for illustration; it is not any organisation's policy."
+currency: USD
+dimensions: [line]
+people:
+  attrs_keep: [location]
+privacy:
+  k: 5
+  tree: {kind: unit}
+  collapse:
+    level: {L1: L1-L3, L2: L1-L3, L3: L1-L3}
+  compare_by: [function]
+bands:
+  metric: cost_ref
+  thresholds:
+    - {band: none, from: "0"}
+    - {band: light, from: "0.01"}
+    - {band: regular, from: "12.34"}
+    - {band: heavy, from: "123.45"}
+    - {band: very_heavy, from: "456.78"}
+premium_tiers: [premium]
+seats:
+  idle_after_days: 21
+pools:
+  budgets:
+    - {provider: github_copilot, provider_account_id: "org:example-vertical", monthly_amount: "234.56"}
+alerts:
+  daily_breaker: "87.65"
+  spike: {multiplier: "5", floor: "59.87", trailing_days: 7, min_history_days: 5}
+audiences:
+  exec: {max_depth: 2}
+named_exceptions:
+  - {id: high-month, audience: central, condition: month_cost_ref_above, threshold: "1234.56"}
+  - {id: spikes, audience: manager, condition: spike_events_at_least, threshold: "2"}
+scenarios:
+  - id: tiered_caps
+    label: "Monthly caps by level band"
+    person_caps:
+      default: "1234.56"
+      by: level
+      values: {L1-L3: "265.79", L4: "237.41", L5: "1304.82"}
+    unit_envelopes: null
+    alert_fractions: ["0.8", "1.0"]
+    top_up_amount: "23.45"
+  - id: flat_cap
+    label: "One flat individual safety net for everyone, no personal levels"
+    person_caps: {default: "1543.21", by: null, values: {}}
+    unit_envelopes: null
+    alert_fractions: ["0.8", "1.0"]
+    top_up_amount: null
+  - id: unit_caps_plus_flat
+    label: "Monthly envelopes for divisions plus the flat individual cap"
+    person_caps: {default: "1543.21", by: null, values: {}}
+    unit_envelopes:
+      values: {commercial: "5698.76", operations: "3098.76", finance-legal: "3987.65", people: "107.65", product: "257.65", central-it: "5432.19"}
+    alert_fractions: ["0.8", "1.0"]
+    top_up_amount: "345.67"
+  - id: default_cap
+    label: "The default cap for everyone"
+    person_caps: {default: "1234.56", by: null, values: {}}
+    unit_envelopes: null
+    alert_fractions: ["0.8", "1.0"]
+    top_up_amount: "23.45"

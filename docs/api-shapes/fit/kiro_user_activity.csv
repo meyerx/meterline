@@ -1,0 +1,4 @@
+Date,UserId,User_Email,Client_Type,Credits_Used,Overage_Credits_Used,Total_Messages
+2026-10-01,kiro-u-1,gil.nash@example.com,IDE,12.5,0,18
+2026-10-01,kiro-u-1,gil.nash@example.com,CLI,3,0.5,4
+2026-10-01,kiro-u-2,hana.ito@example.com,IDE,0,0,0

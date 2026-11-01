@@ -1,0 +1,35 @@
+# The daily job: run each connector, then build gold. Copy this file, edit it, and keep keys OUT of it:
+# every connector reads its key from its documented environment variable (see the connector README).
+
+data_root = "job-data"          # each connector keeps its own folder here: <data_root>/<name>
+gold_root = "job-data/gold"     # one gold folder per day: <gold_root>/<YYYY-MM-DD>
+
+[gold]
+org = "org"                     # the organisation files (people.csv, units.csv, ...)
+policy = "policy.yaml"
+prices = "prices.yaml"
+# the hashing key is read from METERLINE_GOLD_KEY
+
+[[connector]]
+name = "claude"
+kind = "anthropic"              # anthropic | anthropic_admin | litellm | copilot
+since = "2026-09-01"            # first day of a backfill; later runs use daily
+
+[[connector]]
+name = "api-usage"
+kind = "anthropic_admin"
+provider_account_id = "my-org"
+since = "2026-09-01"
+
+[[connector]]
+name = "proxy"
+kind = "litellm"
+proxy_name = "my-proxy"
+since = "2026-09-01"
+
+[[connector]]
+name = "copilot"
+kind = "copilot"
+level = "organization"
+slug = "my-org"
+since = "2026-09-01"

@@ -1,0 +1,21 @@
+price_list_format: 1
+as_of: "2026-10-01"
+source: "Invented values for the meterline-gold test fixture; not any provider's price list or any organisation's contract."
+currency: USD
+models:
+  - {model: model-x-light, vendor: vendor-x, family: x, tier: light}
+  - {model: model-x-premium, vendor: vendor-x, family: x, tier: premium}
+  - {model: model-y-standard, vendor: vendor-y, family: y, tier: standard}
+  - {model: model-z-std, vendor: vendor-z, family: z, tier: standard}
+token_prices:
+  - {provider: "*", model: model-x-light, valid_from: "2000-01-01", per_million: {input_uncached: "1.10", cache_read: "0.11", cache_write_5m: "1.375", cache_write_1h: "2.20", output: "5.50"}}
+  - {provider: "*", model: model-x-premium, valid_from: "2000-01-01", per_million: {input_uncached: "11.00", cache_read: "1.10", cache_write_5m: "13.75", cache_write_1h: "22.00", output: "55.00"}}
+  - {provider: "*", model: model-y-standard, valid_from: "2000-01-01", per_million: {input_uncached: "2.20", cache_read: "0.22", cache_write_5m: "2.75", cache_write_1h: "2.75", output: "8.80"}}
+unit_prices:
+  - {provider: github_copilot, unit: ai_credit, valid_from: "2000-01-01", price: "0.01"}
+included:
+  - {provider: github_copilot, product: copilot_cli}
+  - {provider: github_copilot, product: copilot_app}
+seats:
+  - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "21.50", included_credits: null}
+  - {provider: github_copilot, provider_account_id: "org:fixture-co", valid_from: "2000-01-01", per_month: "13.75", included_credits: "73"}

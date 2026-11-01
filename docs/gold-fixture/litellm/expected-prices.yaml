@@ -1,0 +1,35 @@
+as_of: '2026-10-01'
+currency: USD
+included: []
+models:
+- family: ''
+  model: model-q-one
+  tier: unclassified
+  vendor: vendor-q
+- family: ''
+  model: model-q-two
+  tier: unclassified
+  vendor: vendor-q
+price_list_format: 1
+seats: []
+source: LiteLLM model_prices_and_context_window.json, local copy, keys listed in keys.txt
+token_prices:
+- model: model-q-one
+  per_million:
+    cache_read: '0.150000'
+    cache_write_1h: null
+    cache_write_5m: '1.875000'
+    input_uncached: '1.500000'
+    output: '6.000000'
+  provider: '*'
+  valid_from: '2026-10-01'
+- model: model-q-two
+  per_million:
+    cache_read: '0.200000'
+    cache_write_1h: null
+    cache_write_5m: '0.200000'
+    input_uncached: '0.200000'
+    output: '0.800000'
+  provider: '*'
+  valid_from: '2026-10-01'
+unit_prices: []

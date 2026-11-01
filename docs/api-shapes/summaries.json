@@ -1,0 +1,14 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-09-15T00:00:00Z",
+      "ending_at": "2026-09-16T00:00:00Z",
+      "assigned_seat_count": 50,
+      "pending_invite_count": 2,
+      "daily_active_user_count": 31,
+      "weekly_active_user_count": 42,
+      "monthly_active_user_count": 47
+    }
+  ],
+  "next_page": null
+}

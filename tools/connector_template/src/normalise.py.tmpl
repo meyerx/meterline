@@ -1,0 +1,81 @@
+"""Normalising: raw responses to record lines. The revision rule (``drop_unchanged``) and the read of what is already
+published (``load_published``) are in the core package, ``meterline.published``."""
+
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Dict, List
+
+# one-endpoint: begin
+from meterline import UsageRecord
+# one-endpoint: end
+# two-endpoints: begin
+from meterline import OrgTotal, UsageRecord
+# two-endpoints: end
+
+PROVIDER = "@@NAME@@"
+
+# A day's figures are final this many days after midnight UTC at the end of the day. 4 is the contract's conservative
+# default for a provider that documents nothing (docs/reference/connector-contract.md, "Windows"): a longer wait costs only
+# extra reads, because the revision rule keeps unchanged records out. Change it only from the provider's documentation
+# or from a live run, and keep ``REREAD_DAYS`` in cli.py at this number plus one.
+FINAL_AFTER_DAYS = 4
+
+# The shapes the stub knows, for the unknown-field report (``meterline.run.note_unknown_fields``): a dict lists the known
+# keys, a one-item list describes the items of a list, ``None`` is a value that is not looked into. A key that is not
+# listed is reported in the run manifest and never stops the run.
+KNOWN_SHAPES: Dict[str, Any] = {
+    "usage": {"date": None, "next_page": None, "data": [{"user": None, "model": None, "input_tokens": None, "output_tokens": None, "cost": None}]},
+# two-endpoints: begin
+    "totals": {"date": None, "next_page": None, "data": [{"model": None, "input_tokens": None, "output_tokens": None, "cost": None}]},
+# two-endpoints: end
+}
+
+
+def is_final(day: date, pulled_at: datetime) -> bool:
+    """True when the pull was at least ``FINAL_AFTER_DAYS`` days after midnight UTC at the end of ``day``."""
+    return pulled_at >= datetime.combine(day + timedelta(days=1 + FINAL_AFTER_DAYS), time.min, tzinfo=timezone.utc)
+
+
+def _usage(raw: Dict[str, Any], provider_account_id: str, batch_id: str, pulled_at: datetime) -> List[Any]:
+    """The usage records of one day's response. A field the response lacks raises ``KeyError``, which the run reports as a
+    failed check (exit 2): a required field is never read as zero."""
+    day = date.fromisoformat(raw["date"])
+    out: List[Any] = []
+    for row in raw["data"]:
+        out.append(UsageRecord(
+            provider=PROVIDER, provider_account_id=provider_account_id, grain="day", period_start=day, period_end=day,
+            actor_kind="user", actor_id=row["user"], actor_email=row["user"], product="api", model=row["model"],
+            is_final=is_final(day, pulled_at), tokens_input_uncached=row["input_tokens"], tokens_output=row["output_tokens"],
+            cost=Decimal(row["cost"]), currency="USD", cost_basis="billed", pulled_at=pulled_at, batch_id=batch_id,
+        ))  # cost is the Decimal that fetch.load_json parsed; it is not rounded here
+    return out
+# two-endpoints: begin
+
+
+def _totals(raw: Dict[str, Any], provider_account_id: str, batch_id: str, pulled_at: datetime) -> List[Any]:
+    """The organisation totals of one day: one record per model."""
+    day = date.fromisoformat(raw["date"])
+    out: List[Any] = []
+    for row in raw["data"]:
+        out.append(OrgTotal(
+            provider=PROVIDER, provider_account_id=provider_account_id, grain="day", period_start=day, period_end=day,
+            product="api", model=row["model"], is_final=is_final(day, pulled_at), tokens_input_uncached=row["input_tokens"],
+            tokens_output=row["output_tokens"], cost=Decimal(row["cost"]), currency="USD", cost_basis="billed",
+            pulled_at=pulled_at, batch_id=batch_id,
+        ))
+    return out
+# two-endpoints: end
+
+
+MAPPERS = {
+    "usage": _usage,
+# two-endpoints: begin
+    "totals": _totals,
+# two-endpoints: end
+}
+
+
+def normalise(endpoint: str, pages: List[Any], provider_account_id: str, batch_id: str, pulled_at: datetime) -> List[Any]:
+    """The records of every page of one raw file of ``endpoint`` (``fetch.read_raw`` returns the pages); ``KeyError``,
+    ``ValueError`` or ``TypeError`` when one is not in the documented shape."""
+    return [record for page in pages for record in MAPPERS[endpoint](page, provider_account_id, batch_id, pulled_at)]

@@ -1,0 +1,371 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 0"  # weekly, Sunday 03:17 UTC: the full set, so drift shows up without a push
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TZ: UTC
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  # A pull request runs the light jobs and tests on python 3.12. Python 3.10, minimum-versions and quickstart run on
+  # push to main, on the weekly schedule and on manual runs; minimum-versions also runs on a pull request that
+  # changes a package's pyproject.toml (it is the job that proves the declared lower bounds).
+  changes:
+    name: changes (which heavy jobs this event runs)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      minimum_versions: ${{ steps.diff.outputs.minimum_versions }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # the diff below needs the merge base of the pull request
+      - name: Decide whether minimum-versions runs
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          run=true
+          if [ "$EVENT" = "pull_request" ]; then
+            run=false
+            if git diff --name-only "${PR_BASE}...${PR_HEAD}" | grep -Eq '^packages/[^/]+/pyproject\.toml$'; then
+              run=true
+            fi
+          fi
+          echo "minimum_versions=${run}" >> "$GITHUB_OUTPUT"
+          echo "minimum-versions runs: ${run}"
+
+  tests:
+    name: tests (python ${{ matrix.python-version }})
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+        # python 3.10 is left out on a pull request (it runs on main, weekly and on manual runs)
+        exclude: ${{ fromJSON(github.event_name == 'pull_request' && '[{"python-version":"3.10"}]' || '[]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0  # tools/test_commit_messages.py reads the commits since its baseline
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: packages/*/pyproject.toml
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      - name: Install every package (editable) with its dev and parquet extras, ruff for the lint tests, xdist for -n, build and twine for the README check
+        run: |
+          python -m pip install "ruff==0.17.3" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0" \
+            -e "packages/meterline[dev,parquet]" \
+            -e "packages/meterline-anthropic[dev,parquet]" \
+            -e "packages/meterline-anthropic-admin[dev,parquet]" \
+            -e "packages/meterline-litellm[dev,parquet]" \
+            -e "packages/meterline-copilot[dev,parquet]" \
+            -e "packages/meterline-sim[dev]" \
+            -e "packages/meterline-gold[dev]"
+      - name: Run the test suite
+        run: python -m pytest -q -n 4 packages tools -p no:cacheprovider -rs
+
+  minimum-versions:
+    # Every dependency declares a lower bound; this job proves the bounds by installing the lowest version each
+    # one allows (direct dependencies only; what they pull in resolves as usual) on the lowest Python, then
+    # running every test.
+    name: minimum versions (python 3.10, lowest direct dependencies)
+    needs: changes
+    if: needs.changes.outputs.minimum_versions == 'true'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: "3.10"
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: "3.10"  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      - name: Install every package with the lowest version of each declared dependency
+        run: |
+          python -m pip install "uv==0.12.19" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0"
+          uv pip install --system --resolution lowest-direct \
+            -e "packages/meterline[dev,parquet]" \
+            -e "packages/meterline-anthropic[dev,parquet]" \
+            -e "packages/meterline-anthropic-admin[dev,parquet]" \
+            -e "packages/meterline-litellm[dev,parquet]" \
+            -e "packages/meterline-copilot[dev,parquet]" \
+            -e "packages/meterline-sim[dev]" \
+            -e "packages/meterline-gold[dev,parquet]"
+          uv pip list --system
+      - name: Run the test suite
+        run: python -m pytest -q -n 4 packages tools -p no:cacheprovider -rs
+
+  quickstart:
+    name: quick start (the README commands, fresh venv)
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: "3.10"
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: "3.10"  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      # The commands come out of README.md itself, so the README and this job cannot drift apart.
+      # The tests and minimum-versions jobs already run the whole suite on every push, so on a push this job
+      # proves the README install and the demo; the README's suite line runs on schedule and workflow_dispatch.
+      - name: Run the README "Quick start" block (install only on push; install and full suite on schedule and manual runs)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SUITE_LINE: .venv/bin/python -m pytest -q packages
+        run: |
+          python tools/readme_block.py "Quick start" > "$RUNNER_TEMP/quick-start.sh"
+          case "$EVENT_NAME" in
+            schedule|workflow_dispatch) ;;
+            *)
+              found="$(grep -c -x -F -- "$SUITE_LINE" "$RUNNER_TEMP/quick-start.sh" || true)"
+              if [ "$found" != 1 ]; then
+                echo "::error::README Quick start block must hold the line '$SUITE_LINE' exactly once, found $found"
+                exit 1
+              fi
+              grep -v -x -F -- "$SUITE_LINE" "$RUNNER_TEMP/quick-start.sh" > "$RUNNER_TEMP/quick-start.filtered.sh"
+              mv "$RUNNER_TEMP/quick-start.filtered.sh" "$RUNNER_TEMP/quick-start.sh"
+              ;;
+          esac
+          cat "$RUNNER_TEMP/quick-start.sh"
+          bash -euxo pipefail "$RUNNER_TEMP/quick-start.sh"
+      - name: Run the README "Try it without a key" block (simulator, then gold)
+        run: |
+          python tools/readme_block.py "Try it without a key" > "$RUNNER_TEMP/try-it.sh"
+          cat "$RUNNER_TEMP/try-it.sh"
+          bash -euxo pipefail "$RUNNER_TEMP/try-it.sh"
+          test -s gold/manifest.json
+      - name: Run the "Run it" block of each example (simulated data and the connectors' fake APIs, no key)
+        run: |
+          .venv/bin/python -m pip install tomli
+          for readme in examples/01-sim-to-kpis/README.md examples/02-exec-report/README.md examples/03-daily-job/README.md; do
+            rm -rf sim-out gold exec-report.html job-data
+            python tools/readme_block.py "Run it" --readme "$readme" > "$RUNNER_TEMP/example.sh"
+            cat "$RUNNER_TEMP/example.sh"
+            bash -euxo pipefail "$RUNNER_TEMP/example.sh"
+          done
+
+  audit:
+    name: dependency audit (pip-audit)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: "3.12"
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      - name: Install every package with all its extras, and pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "pip-audit==2.10.1" \
+            -e "packages/meterline[dev,parquet]" \
+            -e "packages/meterline-anthropic[dev,parquet]" \
+            -e "packages/meterline-anthropic-admin[dev,parquet]" \
+            -e "packages/meterline-litellm[dev,parquet]" \
+            -e "packages/meterline-copilot[dev,parquet]" \
+            -e "packages/meterline-sim[dev]" \
+            -e "packages/meterline-gold[dev,parquet]"
+      - name: Look up every installed dependency in the vulnerability databases
+        # the packages themselves are installed editable from this checkout and are skipped
+        run: python -m pip_audit --skip-editable --progress-spinner off
+
+  lint:
+    name: lint (ruff)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: "3.12"
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      - name: Install ruff
+        run: python -m pip install "ruff==0.17.3"
+      - name: Lint the package sources with the committed configuration (ruff.toml)
+        run: ruff check packages/*/src
+      - name: Check the whole tree for syntax errors and undefined names
+        # E9 syntax/IO errors, F63 invalid comparisons, F7 misplaced statements, F82 undefined names.
+        run: ruff check --isolated --select E9,F63,F7,F82 .
+
+  dashboard-a11y:
+    # F-43: axe-core on every tab of every audience page of the fixture build, both schemes; fails on a
+    # critical or serious violation, or on a CSP violation.
+    name: dashboard accessibility (axe-core 4.10)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: "3.12"
+      - name: Use the runner's pyenv Python (self-hosted)
+        if: runner.environment == 'self-hosted'
+        env:
+          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
+        run: |
+          set -euo pipefail
+          version="$(pyenv latest "$PYTHON_VERSION")"
+          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
+          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
+          "$RUNNER_TEMP/venv/bin/python" --version
+      - name: Install meterline and gold
+        run: python -m pip install -e packages/meterline -e packages/meterline-gold
+      - name: Build the fixture gold folder
+        run: >-
+          METERLINE_GOLD_KEY="$(python -c 'print("x" * 32)')"
+          meterline-gold build --silver docs/gold-fixture/input/silver --org-files docs/gold-fixture/input/org
+          --policy docs/gold-fixture/input/policy.yaml --prices docs/gold-fixture/input/prices.yaml
+          --invoice docs/gold-fixture/input/invoice.csv --out "$RUNNER_TEMP/gold"
+      # under Node 26, Puppeteer's Chrome unzip stops early and still exits 0, leaving a broken browser; pin an LTS Node
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Install axe-core and Puppeteer, pinned
+        working-directory: ${{ runner.temp }}
+        # newer npm does not run Puppeteer's install script, so fetch the Chrome build it pins explicitly
+        run: |
+          npm install --no-save --no-audit --no-fund axe-core@4.10.3 puppeteer@23.11.1
+          npx --no-install puppeteer browsers install chrome
+      - name: Install chrome-headless-shell, the build Puppeteer pins
+        working-directory: ${{ runner.temp }}
+        # tools/dashboard_axe.js launches headless: "shell"; with no version given, Puppeteer's CLI installs the
+        # chrome-headless-shell build puppeteer@23.11.1 pins (131.0.6778.204), the one launch looks for
+        run: npx --no-install puppeteer browsers install chrome-headless-shell
+      - name: Run axe on the dashboard
+        env:
+          NODE_PATH: ${{ runner.temp }}/node_modules
+        run: node tools/dashboard_axe.js "$RUNNER_TEMP/gold" packages/meterline-gold/src/meterline_gold/dashboard/index.html
+
+  secrets:
+    name: secret scan (gitleaks)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks (pinned release, checksum verified)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          RUNNER_OS_NAME: ${{ runner.os }}
+          RUNNER_ARCH_NAME: ${{ runner.arch }}
+        run: |
+          set -euo pipefail
+          # one pinned checksum per platform, from the gitleaks ${GITLEAKS_VERSION} checksums file
+          case "${RUNNER_OS_NAME}-${RUNNER_ARCH_NAME}" in
+            Linux-X64)  platform="linux_x64";  sha="551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" ;;
+            macOS-X64)  platform="darwin_x64"; sha="dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709" ;;
+            macOS-ARM64) platform="darwin_arm64"; sha="b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5" ;;
+            *) echo "No pinned gitleaks build for ${RUNNER_OS_NAME}-${RUNNER_ARCH_NAME}" >&2; exit 1 ;;
+          esac
+          f="gitleaks_${GITLEAKS_VERSION}_${platform}.tar.gz"
+          curl -sSfL -o "$f" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${f}"
+          echo "${sha}  ${f}" | shasum -a 256 -c -
+          tar -xzf "$f" gitleaks
+          ./gitleaks version
+      - name: Scan the commits this event adds (whole history on manual runs)
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          range=""
+          if [ "$EVENT" = "pull_request" ]; then
+            range="${PR_BASE}..${PR_HEAD}"
+          elif [ "$EVENT" = "push" ] && [ -n "${PUSH_BEFORE//0/}" ]; then
+            # a push to a new branch has an all-zero "before"; that case falls through to a full scan
+            range="${PUSH_BEFORE}..${PUSH_AFTER}"
+          fi
+          if [ -n "$range" ]; then
+            echo "Scanning commits ${range}"
+            ./gitleaks git --redact --no-banner --verbose --log-opts="${range}" .
+          else
+            echo "Scanning the full history"
+            ./gitleaks git --redact --no-banner --verbose .
+          fi

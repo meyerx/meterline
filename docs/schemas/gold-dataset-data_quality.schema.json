@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of central/data_quality.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8. Retired names: schema_version 2.0 renamed a column (org_id is now provider_account_id).",
+  "properties": {
+    "metric": {
+      "description": "Name of the data-quality metric. The metric unallocated_share is the not-a-person cost over the reference cost (cost_ref): it is not the reference unallocated share (the cookbook KPI one_unallocated_share), which is the one to report.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM; empty on the freshness metrics.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "provider": {
+      "description": "Provider the usage or seats came from, as the silver records name it.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "provider_account_id": {
+      "description": "Provider account label from the silver records; empty only where seats are matched on provider alone.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "value": {
+      "description": "Value of the metric, written in the metric's own type (count, money, ratio or date). The metric sets the type, not the column: read metric before you cast or sum.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "dq",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    }
+  },
+  "required": [
+    "schema_version",
+    "month",
+    "provider",
+    "provider_account_id",
+    "metric",
+    "value"
+  ],
+  "title": "gold-dataset-data_quality",
+  "type": "object",
+  "x-audiences": [
+    "central"
+  ],
+  "x-columns": [
+    "schema_version",
+    "month",
+    "provider",
+    "provider_account_id",
+    "metric",
+    "value"
+  ],
+  "x-cost-column-rule": "`value` mixes counts, amounts, ratios and dates; read `metric` first and sum nothing across metrics.",
+  "x-dataset": "data_quality",
+  "x-files": [
+    "central/data_quality.csv"
+  ],
+  "x-grain": "One row per month, provider, provider account and metric.",
+  "x-joins": {
+    "provider": [
+      "costs_month.provider"
+    ],
+    "provider_account_id": [
+      "costs_month.provider_account_id"
+    ]
+  },
+  "x-primary-key": [
+    "month",
+    "provider",
+    "provider_account_id",
+    "metric"
+  ]
+}

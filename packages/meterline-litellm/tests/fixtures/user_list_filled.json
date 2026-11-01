@@ -1,0 +1,89 @@
+{
+  "page": 1,
+  "page_size": 100,
+  "total": 2,
+  "total_pages": 1,
+  "users": [
+    {
+      "allowed_cache_controls": [
+        "no-cache",
+        "no-store"
+      ],
+      "budget_duration": null,
+      "budget_reset_at": null,
+      "created_at": "2026-09-01T00:00:00Z",
+      "key_count": 2,
+      "last_breach_check_at": null,
+      "max_budget": 100.0,
+      "max_parallel_requests": null,
+      "metadata": {
+        "note": "synthetic"
+      },
+      "model_max_budget": {
+        "model-a": 50.0
+      },
+      "model_spend": {
+        "model-a": 9.5,
+        "model-b": 3.0
+      },
+      "models": [
+        "model-a",
+        "model-b"
+      ],
+      "object_permission": null,
+      "object_permission_id": null,
+      "organization_id": null,
+      "organization_memberships": null,
+      "password_reset_required": false,
+      "policies": [
+        "policy-a"
+      ],
+      "rpm_limit": null,
+      "spend": 12.5,
+      "sso_user_id": null,
+      "team_id": null,
+      "teams": [
+        "team-a"
+      ],
+      "tpm_limit": null,
+      "updated_at": "2026-09-02T00:00:00Z",
+      "user_alias": "ada",
+      "user_email": "ada@example.com",
+      "user_id": "user-a",
+      "user_role": "internal_user"
+    },
+    {
+      "allowed_cache_controls": [],
+      "budget_duration": null,
+      "budget_reset_at": null,
+      "created_at": "2026-09-01T00:00:00Z",
+      "key_count": 1,
+      "last_breach_check_at": null,
+      "max_budget": 100.0,
+      "max_parallel_requests": null,
+      "metadata": {},
+      "model_max_budget": {},
+      "model_spend": {},
+      "models": [
+        "model-a"
+      ],
+      "object_permission": null,
+      "object_permission_id": null,
+      "organization_id": null,
+      "organization_memberships": null,
+      "password_reset_required": false,
+      "policies": [],
+      "rpm_limit": null,
+      "spend": 0.0,
+      "sso_user_id": null,
+      "team_id": null,
+      "teams": [],
+      "tpm_limit": null,
+      "updated_at": "2026-09-02T00:00:00Z",
+      "user_alias": null,
+      "user_email": "bob@example.com",
+      "user_id": "user-b",
+      "user_role": "internal_user"
+    }
+  ]
+}

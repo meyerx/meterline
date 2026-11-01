@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of central/groups_month.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8. Retired names: schema_version 2.0 renamed a column (group_id is now cell_kind).",
+  "properties": {
+    "active_days": {
+      "description": "Sum of the cell's persons' active days.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "active_persons": {
+      "description": "Persons with at least one active day; withheld when it would expose a few people.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "cell_id": {
+      "description": "Id of the grid cell: org:, unit:<unit_id> or attr:<attribute>=<value>|...",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "cell_key": {
+      "description": "Cell id without its kind prefix.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "cell_kind": {
+      "description": "Kind of grid cell: org, unit or attr.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "cost_ref": {
+      "description": "Sum of cost_ref over the cell's persons.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "depth": {
+      "description": "Depth of the cell in the grid: 0 for the organisation, 1 for a root unit.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "is_final": {
+      "description": "True when the provider will no longer revise the figure.",
+      "enum": [
+        "true",
+        "false",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "p50_cost_ref": {
+      "description": "Median cost_ref per person in the cell (nearest rank).",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "p75_cost_ref": {
+      "description": "75th percentile of cost_ref per person in the cell.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "p90_cost_ref": {
+      "description": "90th percentile of cost_ref per person in the cell.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "p99_cost_ref": {
+      "description": "99th percentile of cost_ref per person in the cell.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "parent_cell_id": {
+      "description": "cell_id of the parent cell; empty for the organisation cell.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "persons": {
+      "description": "Number of attributed persons in the cell.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "suppressed": {
+      "description": "True when the privacy algorithm withholds the cell's figures.",
+      "enum": [
+        "true",
+        "false",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "suppression_reason": {
+      "description": "Why a cell is suppressed: k, differencing or secondary.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "top_decile_share": {
+      "description": "Share of the organisation's cost_ref spent by its top tenth of persons; organisation cell only.",
+      "pattern": "^-?[0-9]+\\.[0-9]{4}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "ratio",
+      "x-hidden-covered": false,
+      "x-unit": "ratio"
+    }
+  },
+  "required": [
+    "schema_version",
+    "month",
+    "cell_id",
+    "cell_kind",
+    "cell_key",
+    "depth",
+    "parent_cell_id",
+    "suppressed",
+    "suppression_reason",
+    "persons",
+    "active_persons",
+    "active_days",
+    "cost_ref",
+    "p50_cost_ref",
+    "p75_cost_ref",
+    "p90_cost_ref",
+    "p99_cost_ref",
+    "top_decile_share",
+    "is_final"
+  ],
+  "title": "gold-dataset-groups_month",
+  "type": "object",
+  "x-audiences": [
+    "central"
+  ],
+  "x-columns": [
+    "schema_version",
+    "month",
+    "cell_id",
+    "cell_kind",
+    "cell_key",
+    "depth",
+    "parent_cell_id",
+    "suppressed",
+    "suppression_reason",
+    "persons",
+    "active_persons",
+    "active_days",
+    "cost_ref",
+    "p50_cost_ref",
+    "p75_cost_ref",
+    "p90_cost_ref",
+    "p99_cost_ref",
+    "top_decile_share",
+    "is_final"
+  ],
+  "x-cost-column-rule": "A cell's `cost_ref` already sums its persons, and cells overlap: a unit cell contains its sub-unit cells. Sum the cells of one `cell_kind` at one `depth`, never across depths.",
+  "x-dataset": "groups_month",
+  "x-files": [
+    "central/groups_month.csv"
+  ],
+  "x-grain": "One row per month and grid cell.",
+  "x-joins": {
+    "cell_key": [
+      "units.unit_id"
+    ],
+    "parent_cell_id": [
+      "groups_month.cell_id"
+    ]
+  },
+  "x-primary-key": [
+    "month",
+    "cell_id"
+  ]
+}

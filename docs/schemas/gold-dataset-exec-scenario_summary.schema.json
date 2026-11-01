@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of exec/scenario_summary.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8.",
+  "properties": {
+    "hidden": {
+      "description": "True when a privacy rule withheld at least one covered value of the row; empty values then mean withheld.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "persons": {
+      "description": "Number of persons with a cap in the scenario.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "persons_stopped": {
+      "description": "Persons whose position passed their cap.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": true,
+      "x-unit": "count"
+    },
+    "scenario_id": {
+      "description": "Id of the shadow scenario from the policy.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "units": {
+      "description": "Number of units with an envelope in the scenario.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    }
+  },
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "month",
+    "persons",
+    "persons_stopped",
+    "units",
+    "hidden"
+  ],
+  "title": "gold-dataset-exec-scenario_summary",
+  "type": "object",
+  "x-audiences": [
+    "exec"
+  ],
+  "x-columns": [
+    "schema_version",
+    "scenario_id",
+    "month",
+    "persons",
+    "persons_stopped",
+    "units",
+    "hidden"
+  ],
+  "x-cost-column-rule": "The `*_excess` and `*_top_up_total` columns are what the scenario would have done; they are never spend.",
+  "x-dataset": "scenario_summary",
+  "x-files": [
+    "exec/scenario_summary.csv"
+  ],
+  "x-grain": "One row per scenario and month.",
+  "x-joins": {
+    "scenario_id": [
+      "scenario_persons.scenario_id"
+    ]
+  },
+  "x-primary-key": [
+    "scenario_id",
+    "month"
+  ]
+}

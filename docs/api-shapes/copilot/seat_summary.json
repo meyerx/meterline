@@ -1,0 +1,12 @@
+{
+  "plan_type": "business",
+  "seat_breakdown": {
+    "active_this_cycle": 12,
+    "added_this_cycle": 9,
+    "inactive_this_cycle": 11,
+    "pending_cancellation": 0,
+    "pending_invitation": 0,
+    "total": 12
+  },
+  "seat_management_setting": "assign_selected"
+}

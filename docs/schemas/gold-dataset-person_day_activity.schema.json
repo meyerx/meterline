@@ -1,0 +1,300 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of central/person_day_activity.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8. Retired names: schema_version 2.0 renamed a column (org_id is now provider_account_id).",
+  "properties": {
+    "actor_key": {
+      "description": "Keyed hash of the provider's own actor id, for an actor that is not resolved to a person.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "commits": {
+      "description": "Commits made.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "day": {
+      "description": "Calendar day, YYYY-MM-DD (UTC).",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": false,
+      "x-unit": "date"
+    },
+    "edits_accepted": {
+      "description": "Edits the person accepted.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "edits_rejected": {
+      "description": "Edits the person rejected.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "identity_status": {
+      "description": "How the actor was resolved: resolved, non_person or unresolved.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "lines_added": {
+      "description": "Lines of code added.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "lines_removed": {
+      "description": "Lines of code removed.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "messages": {
+      "description": "Number of messages.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "person_key": {
+      "description": "Pseudonymous person key: a keyed hash of the person id, stable for one hashing key.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "product": {
+      "description": "Product within the provider; empty when the provider has none.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "provider": {
+      "description": "Provider the usage or seats came from, as the silver records name it.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "provider_account_id": {
+      "description": "Provider account label from the silver records; empty only where seats are matched on provider alone.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "pull_requests": {
+      "description": "Pull requests opened.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "requests": {
+      "description": "Number of requests.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "sessions": {
+      "description": "Number of sessions.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "source_records": {
+      "description": "Number of silver records merged into the row.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "suggestions_accepted": {
+      "description": "Suggestions the person accepted.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "suggestions_shown": {
+      "description": "Suggestions shown to the person.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    }
+  },
+  "required": [
+    "schema_version",
+    "day",
+    "month",
+    "provider",
+    "provider_account_id",
+    "person_key",
+    "actor_key",
+    "identity_status",
+    "product",
+    "sessions",
+    "messages",
+    "requests",
+    "suggestions_shown",
+    "suggestions_accepted",
+    "lines_added",
+    "lines_removed",
+    "edits_accepted",
+    "edits_rejected",
+    "commits",
+    "pull_requests",
+    "source_records"
+  ],
+  "title": "gold-dataset-person_day_activity",
+  "type": "object",
+  "x-audiences": [
+    "central"
+  ],
+  "x-columns": [
+    "schema_version",
+    "day",
+    "month",
+    "provider",
+    "provider_account_id",
+    "person_key",
+    "actor_key",
+    "identity_status",
+    "product",
+    "sessions",
+    "messages",
+    "requests",
+    "suggestions_shown",
+    "suggestions_accepted",
+    "lines_added",
+    "lines_removed",
+    "edits_accepted",
+    "edits_rejected",
+    "commits",
+    "pull_requests",
+    "source_records"
+  ],
+  "x-cost-column-rule": "No cost column.",
+  "x-dataset": "person_day_activity",
+  "x-files": [
+    "central/person_day_activity.csv"
+  ],
+  "x-grain": "One row per day, provider, provider account, person or actor and product.",
+  "x-joins": {
+    "actor_key": [
+      "identity_map.actor_key"
+    ],
+    "person_key": [
+      "people.person_key"
+    ]
+  },
+  "x-primary-key": [
+    "day",
+    "provider",
+    "provider_account_id",
+    "person_key",
+    "actor_key",
+    "product"
+  ]
+}

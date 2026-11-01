@@ -1,0 +1,50 @@
+# meterline
+
+> meterline turns AI usage data from provider APIs (Anthropic Enterprise Analytics, Anthropic Admin, LiteLLM, GitHub Copilot) into one common record format, one line per usage event, and builds per-person and per-group datasets from those records with privacy rules applied. It is a batch tool you run yourself, with a simulator so everything can be tried without a key. Read gold, from the audience folder of the reader; silver holds per-person identifiers.
+
+Evidence levels as of 2026-10-30. The three levels are defined in [the glossary](https://github.com/meyerx/meterline/blob/main/docs/glossary.md#evidence-levels).
+`meterline-anthropic-admin`: verified live on a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen).
+`meterline-litellm`: built against documented shapes and checked against LiteLLM v1.106.6's own route code.
+`meterline-anthropic`: built against documented shapes.
+`meterline-copilot`: built against documented shapes.
+No other connector has run against a live account. A real response may differ from the documented shape.
+
+## Docs
+
+- [README](https://github.com/meyerx/meterline/blob/main/README.md): what meterline is, who it is for, quick start and known limits.
+- [Documentation index](https://github.com/meyerx/meterline/blob/main/docs/README.md): every document, grouped by goal.
+- [Tutorial](https://github.com/meyerx/meterline/blob/main/docs/tutorial.md): from the simulator to gold to the example dashboard, with every command's output.
+- [Configure a gold policy](https://github.com/meyerx/meterline/blob/main/docs/how-to/configure-policy.md): group-size suppression, unit envelopes and scenarios.
+- [Add a provider](https://github.com/meyerx/meterline/blob/main/docs/how-to/add-a-provider.md): the steps for a new connector package, from a generated skeleton.
+- [Privacy for adopters](https://github.com/meyerx/meterline/blob/main/docs/PRIVACY.md): personal data per layer, retention and erasure.
+- [meterline-anthropic](https://github.com/meyerx/meterline/blob/main/packages/meterline-anthropic/README.md): the Anthropic Claude Enterprise Analytics API.
+- [meterline-anthropic-admin](https://github.com/meyerx/meterline/blob/main/packages/meterline-anthropic-admin/README.md): the Anthropic Admin Usage and Cost API of a Console organisation.
+- [meterline-litellm](https://github.com/meyerx/meterline/blob/main/packages/meterline-litellm/README.md): a LiteLLM proxy's admin API.
+- [meterline-copilot](https://github.com/meyerx/meterline/blob/main/packages/meterline-copilot/README.md): GitHub Copilot usage reports, billing and seats.
+- [Connector contract](https://github.com/meyerx/meterline/blob/main/docs/reference/connector-contract.md): the rules every connector keeps, with the conformance kit that checks them.
+
+## Reference
+
+- [Records](https://github.com/meyerx/meterline/blob/main/docs/records.md): every field of the five record kinds.
+- [Gold datasets](https://github.com/meyerx/meterline/blob/main/docs/reference/gold-datasets.md): every gold file with its columns, units, key and which cost column to sum.
+- [Schemas](https://github.com/meyerx/meterline/blob/main/docs/schemas/README.md): JSON Schema for silver kinds, organisation inputs, every gold dataset and the audience rules.
+- [Audience rules](https://github.com/meyerx/meterline/blob/main/docs/schemas/gold-audiences.json): which gold file may be served to which reader.
+- [Glossary](https://github.com/meyerx/meterline/blob/main/docs/glossary.md): every project term, defined once.
+- [Architecture](https://github.com/meyerx/meterline/blob/main/docs/architecture.md): bronze, silver and gold, and the audiences.
+- [Gold package](https://github.com/meyerx/meterline/blob/main/packages/meterline-gold/README.md): what a build writes, per audience folder.
+
+## Examples
+
+- [Tutorial](https://github.com/meyerx/meterline/blob/main/docs/tutorial.md): the worked example on simulated data.
+- [FinOps KPIs](https://github.com/meyerx/meterline/blob/main/docs/how-to/finops-kpis.md): the KPI queries over gold with DuckDB, with the team rule, cache savings and the column traps.
+- [Simulated data to KPIs](https://github.com/meyerx/meterline/blob/main/examples/01-sim-to-kpis/README.md): runs the KPI queries on a simulated build.
+- [Static exec report](https://github.com/meyerx/meterline/blob/main/examples/02-exec-report/README.md): an HTML page from exec/ only, checking servable.
+- [Daily job](https://github.com/meyerx/meterline/blob/main/examples/03-daily-job/README.md): all connectors, then gold, with cron and systemd lines.
+- [Operate the daily job](https://github.com/meyerx/meterline/blob/main/docs/how-to/operate-daily.md): order, locking, first-backfill durations and where to look on failure.
+- [Gold fixture](https://github.com/meyerx/meterline/blob/main/docs/gold-fixture/README.md): a small committed input and its expected gold output.
+
+## Optional
+
+- [Threat model](https://github.com/meyerx/meterline/blob/main/docs/THREAT-MODEL.md): assets, trust boundaries and what stops each threat.
+- [Decisions](https://github.com/meyerx/meterline/blob/main/docs/decisions/README.md): why the record format is as it is.
+- [Standards mapping](https://github.com/meyerx/meterline/blob/main/docs/standards-mapping.md): record fields against OpenTelemetry GenAI and FOCUS.

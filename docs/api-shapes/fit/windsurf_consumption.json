@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"date": "2026-10-01", "user_id": "ws-u-1", "user_email": "ivan.roy@example.com", "model_uid": "model-w1",
+     "prompt_credits": 20, "flex_credits": 5},
+    {"date": "2026-10-01", "user_id": "ws-u-2", "user_email": "jade.wu@example.com", "model_uid": "model-w2",
+     "prompt_credits": 7.5, "flex_credits": 0}
+  ]
+}

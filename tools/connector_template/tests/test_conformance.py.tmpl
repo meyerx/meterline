@@ -1,0 +1,36 @@
+"""The connector contract (docs/reference/connector-contract.md), checked by the conformance kit."""
+
+from datetime import date
+
+import pytest
+
+from meterline.conformance import RULES, Connector, check
+from @@PKG@@ import run
+from @@PKG@@.testing import FakeAPI
+
+OPTIONS = {"provider_account_id": "org-one"}
+
+
+def _duplicate(fake):
+    """One answer holds a row twice: the first row of the first day is served again (R16)."""
+    day = sorted(fake.days)[0]
+    fake.days[day].append(dict(fake.days[day][0]))
+
+
+CONNECTOR = Connector(
+    name="@@DIST@@",
+    run=run,
+    make_fake=FakeAPI,
+    credentials=lambda fake: {"@@ENV@@": fake.api_key},
+    backfill_options={"since": date(2026, 9, 1), **OPTIONS},
+    daily_options=OPTIONS,
+    # "" matches every path, so the kit's faults hit every endpoint and R10-R12 cover all of them
+    fail=lambda fake, status, times: fake.fail("", status, times=times),
+    bad_options={"rate_per_minute": 0},
+    duplicate=_duplicate,
+)
+
+
+@pytest.mark.parametrize("rule", RULES, ids=lambda rule: rule.id)
+def test_the_connector_keeps_the_contract(rule, tmp_path):
+    check(rule, CONNECTOR, tmp_path)

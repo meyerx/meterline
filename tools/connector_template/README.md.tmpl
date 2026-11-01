@@ -1,0 +1,140 @@
+# @@DIST@@
+
+> Part of [meterline](https://github.com/meyerx/meterline/blob/main/README.md). meterline helps people who run or pay for AI tools in an organisation see and compare usage and cost across providers: it reads each provider's usage API and writes the data in one common record format.
+
+Reads the @@TITLE@@ usage API and emits [`meterline`](https://github.com/meyerx/meterline/blob/main/packages/meterline/README.md) records, one line per usage event. Python 3.10 or later; runtime dependencies `meterline` and `httpx`.
+
+**Status:** a stub made by `tools/new_connector.py`: built against documented shapes ([evidence level](https://github.com/meyerx/meterline/blob/main/docs/glossary.md#evidence-levels)), here an invented endpoint, with the conformance kit and a fake API. It has never met the real @@TITLE@@ API. Replace the endpoint, the response shape and the mapping, then say here what the shapes were transcribed from. The stub already keeps raw files in the contract's format and follows a page cursor; [Known limits](#known-limits) lists the numbers it assumes.
+
+```sh
+pip install @@DIST@@
+@@DIST@@ backfill --since 2026-09-01 --provider-account-id org-one --data-dir exports/@@DIST@@
+```
+
+**From a clone** of the repository (for the tests and development):
+
+```sh
+pip install -e packages/meterline -e "packages/@@DIST@@[dev]"
+```
+
+## Before you run it
+
+Create a read-only key for the @@TITLE@@ API and put it in the environment as `@@ENV@@`. The key is read there and nowhere else: never from an argument or a file, and never written to a file, a log or a manifest.
+
+## Commands
+
+Each command takes `--data-dir`; `backfill` and `daily` read the key from `@@ENV@@` and take `--provider-account-id`, the identifier of the account the records are about. It is required and must not be empty (an empty one is exit 2). The run manifest keeps it, so `rebuild` needs no option.
+
+| Command | What it does |
+|---|---|
+| `backfill --since YYYY-MM-DD --provider-account-id ID` | Reads every closed UTC day from that day to yesterday and publishes the records. |
+| `daily --provider-account-id ID [--since YYYY-MM-DD]` | Reads every closed day since the last day loaded, and at least the last 5 closed days (`REREAD_DAYS`), which may have been revised. With no `state.json` it stops (exit 2) and asks for `--since`; with a `state.json` it ignores `--since` and says so. |
+| `rebuild` | Rebuilds `records/` from the stored raw responses and the run manifests. It makes no request and needs no key. |
+
+Exit codes, which a run also reports as `failure_kind`:
+
+| Code | `failure_kind` | Meaning | What to do |
+|---|---|---|---|
+| `0` | `none` | The run finished. | Nothing. |
+| `1` | `transient` | A 5xx, a 429 after the retries, a timeout or a connection error. | Run the same command again later; progress is kept. |
+| `2` | `input` | A failed check (including a repeated record key), bad arguments or a configuration error such as a missing key. | Fix the input; running the same command again fails the same way. |
+| `3` | `permanent` | The provider refused the request: 400, 401, 403, 404 or 422. | Fix the key, its scope or the identifier the message names; do not retry unchanged. |
+
+## How it works
+
+The connector sends one query per UTC day and endpoint and follows the page cursor (`next_page`, sent back as `page`) until there is none. It keeps all the pages of a query in one file under `raw/`, each response as received, turns the rows into `UsageRecord` lines under `records/usage/`, and writes a run manifest under `runs/`. Before anything is written, `meterline.batch_failures` checks the records of each kind; a failed check stops the run (exit 2) and publishes nothing. Numbers are read as `Decimal` with `json.loads(..., parse_float=Decimal)`, in the one helper `load_json`, so a cost keeps all its digits. The state file `state.json` lists the days loaded and the run in progress. A record is published only when its content differs from the latest published record with the same key, so a re-read day adds nothing unless the provider revised it.
+
+<!-- two-endpoints: begin -->
+The `totals` report becomes `OrgTotal` lines under `records/org_totals/`, one per day and model.
+
+<!-- two-endpoints: end -->
+## Files under the data directory
+
+The data directory holds the following, all readable by the owner only (files `0600`, folders `0700`):
+
+- `raw/<endpoint>/<window>/<batch_id>.json.gz`: one file per query, for `usage` and any further endpoint, never overwritten. It is gzip JSON with the request URL, `pulled_at` and a list `pages` of `{status, body}`, where `body` is the response text as received. The window is the day, `YYYY-MM-DD`.
+- `records/usage/<batch_id>.jsonl`: the records a run published.
+<!-- two-endpoints: begin -->
+- `records/org_totals/<batch_id>.jsonl`: the organisation totals a run published.
+<!-- two-endpoints: end -->
+- `runs/<batch_id>.json`: the run manifest, with the `provider_account_id` of the run and the `unknown_fields` the provider sent that the connector does not read.
+- `state.json`: the days loaded and the run in progress.
+
+## Record mapping
+
+Each row of a day's report becomes one `usage` record. Replace this table with the mapping of the real API, one line per field.
+
+| Provider field | Record field | Note |
+|---|---|---|
+| `user` | `actor_id`, `actor_email` | An email address. |
+| `model` | `model` | As the provider names it. |
+| `input_tokens` | `tokens_input_uncached` | |
+| `output_tokens` | `tokens_output` | |
+| `cost` | `cost` | A JSON number, read as a `Decimal` and kept as it is; it is never a float. The stub adds no rounding: if a provider sends more than 12 decimals (`meterline.MAX_DECIMALS`), round once, to that scale, in the normaliser. |
+<!-- two-endpoints: begin -->
+
+Each row of the `totals` report becomes one `org_totals` record. The fields `model`, `input_tokens`, `output_tokens` and `cost` map as in the table, and the provider has already added the rows of all users.
+<!-- two-endpoints: end -->
+
+## Response shapes
+
+[`docs/api-shapes/@@NAME@@/`](https://github.com/meyerx/meterline/blob/main/docs/api-shapes) holds one file per endpoint with synthetic values, and a README naming the source page and the date it was read. A test compares what the fake API returns with these files, by keys and nesting. It cannot show that a live API answers the same way.
+
+**When a live response differs.** A live run is the first real test of these shapes. If a response does not match its shape file:
+
+1. Save the live response's structure as the new shape file, with every value replaced by an invented one: synthetic values only, and never commit a real response.
+2. Run the shape check. It fails and names each key that differs between the fake API and the file.
+3. Change the fake API to match, then `fetch.py` and `normalise.py`, until the shape check and the conformance kit pass.
+4. Update the source and the date read in the shape folder's README, and add an entry to the change list of the spec.
+
+## Known limits
+
+Limits are grouped by kind. Say here what the connector does not do, what it has not been checked against and what a live run may show.
+
+**Evidence.** The endpoint and its response shape are invented. They are not any provider's API, and nothing here has met a live account.
+
+<!-- one-endpoint: begin -->
+**Scope.** The stub reads one report per day and writes one record kind. Add the endpoints and record kinds your provider needs to the `ENDPOINTS` table in `fetch.py`.
+<!-- one-endpoint: end -->
+<!-- two-endpoints: begin -->
+**Scope.** The stub reads two reports per day, `usage` and `totals`, and writes two record kinds, `usage` and `org_totals`. Add the endpoints and record kinds your provider needs to the `ENDPOINTS` table in `fetch.py`.
+<!-- two-endpoints: end -->
+
+**Defaults.** The stub takes the contract's numbers for a provider that documents nothing, and they are conservative. A day is final 4 days after it ended (`FINAL_AFTER_DAYS` in `normalise.py`), `daily` re-reads the last 5 closed days (`REREAD_DAYS` in `cli.py`, the final-after number plus one) and a query asks for one day (`WINDOW_DAYS` in `fetch.py`). A longer wait costs only extra reads, because unchanged records are not published again. A day with no row is not marked loaded until it is final. Change a number only from the provider's documentation or from a live run, and say here where it came from.
+
+**Paging.** The fake API pages with a small page size, so every run goes through the page loop. The names `page` and `next_page` and the page size are invented: use the provider's own in `fetch.py` and `testing.py`. A cursor that comes back in the same query stops the run with exit 2, and nothing is published.
+
+**Resuming.** A run that stops on an API failure leaves a `pending` block in `state.json` that names the raw files it kept. The stub does not read the block back: the next run fetches the days again, so a real connector should resume from the files named there.
+
+**Parquet.** The `parquet` extra installs `pyarrow`, which the repository's install lines name for every package. The stub writes JSON Lines only.
+
+## Public interface
+
+What later releases keep working:
+
+- the `@@DIST@@` command line: its commands, options and exit codes, as listed under Commands;
+- from Python, the names in `@@PKG@@.__all__`: `run`, `RunResult` and `__version__`.
+
+## From Python
+
+`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does and returns a `RunResult` (from `meterline`): `exit_code`, `failure_kind`, `http_status`, `ok`, `batch_id`, `manifest_path`, `records`, `windows` and `skipped`. A failed run does not raise.
+
+```python
+from datetime import date
+
+from @@PKG@@ import run
+from @@PKG@@.testing import FakeAPI
+
+fake = FakeAPI()
+result = run("backfill", since=date(2026, 9, 1), data_dir="out", credentials={"@@ENV@@": fake.api_key},
+             transport=fake.transport)
+print(result.exit_code, result.records)
+```
+
+## Testing your integration without a key
+
+`@@PKG@@.testing.FakeAPI` is a public fake of the API on an `httpx.MockTransport`. It serves invented data page by page (`page_size`), scripts faults with `fail(path, status, times=1)`, repeats a page cursor with `repeat_page()`, logs every request in `log` and takes an injected `clock`.
+
+## Tests
+
+`pytest packages/@@DIST@@` runs the connector's own tests, which are the conformance kit (`meterline.conformance`) and nothing else until you add yours. The kit needs `httpx`, which this package already depends on.

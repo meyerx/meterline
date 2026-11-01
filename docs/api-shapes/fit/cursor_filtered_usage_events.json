@@ -1,0 +1,13 @@
+{
+  "usageEvents": [
+    {"timestamp": "2026-10-01T09:15:00Z", "userEmail": "dana.cole@example.com", "model": "model-c1",
+     "tokenUsage": {"inputTokens": 1200, "cacheReadTokens": 8000, "cacheWriteTokens": 500, "outputTokens": 400, "totalCents": 12.5},
+     "chargedCents": 10.25, "requestsCosts": 1.5},
+    {"timestamp": "2026-10-01T14:40:00Z", "userEmail": "dana.cole@example.com", "model": "model-c1",
+     "tokenUsage": {"inputTokens": 800, "cacheReadTokens": 4000, "cacheWriteTokens": 0, "outputTokens": 250, "totalCents": 7.75},
+     "chargedCents": 6.5, "requestsCosts": 1},
+    {"timestamp": "2026-10-01T11:00:00Z", "userEmail": "eli.park@example.com", "model": "model-c2",
+     "tokenUsage": {"inputTokens": 300, "cacheReadTokens": 0, "cacheWriteTokens": 100, "outputTokens": 90, "totalCents": 2.5},
+     "chargedCents": 0, "requestsCosts": 0.5}
+  ]
+}

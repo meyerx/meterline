@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-23zoIimoOa3EYNAmtOwPj36xVOhyDRWlGYPA/Qqc14Q='; style-src 'sha256-T/NhoF//Lbzz4G4yVP4R/y5TxfuZQ5hXQcKBunzaoR0='; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>meterline gold: example dashboard</title>
+<style>
+  :root { --bg: #fbfbfa; --fg: #1d2330; --muted: #5b6475; --line: #d8dbe2; --control: #7a8394; --accent: #2b5fb4; --bar: #5b82c7; --warn: #8a5a00; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171d; --fg: #e6e9ef; --muted: #99a2b3; --line: #2c323d; --control: #6b7385; --accent: #8fb2f0; --bar: #4b6fb0; --warn: #e0b45a; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 8px; }
+  p.note { color: var(--muted); margin: 4px 0 12px; max-width: 70ch; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .tabs button { background: none; color: var(--accent); border: 1px solid var(--control); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
+  .scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; }
+  caption { text-align: left; padding: 6px 8px; color: var(--muted); }
+  .frozen-1, .frozen-2 { position: sticky; background: var(--bg); overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
+  .frozen-1 { left: 0; width: 12ch; min-width: 12ch; max-width: 12ch; }
+  .frozen-2 { left: 12ch; width: 24ch; min-width: 24ch; max-width: 24ch; }
+  th.frozen-1, th.frozen-2 { z-index: 1; }
+  .month { margin: 8px 0; }
+  .month select { margin-left: 6px; min-height: 24px; }
+  td.suppressed { color: var(--warn); font-style: italic; }
+  td.empty { color: var(--muted); }
+  .chart { margin-top: 10px; }
+  .chart select { margin: 4px 8px 4px 0; min-height: 24px; }
+  svg { max-width: 100%; height: auto; }
+  svg text { fill: var(--fg); font-size: 10px; }
+  .err { color: var(--warn); }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  @media (max-width: 700px) {
+    .frozen-1, .frozen-2 { position: static; }
+  }
+  @media (forced-colors: active) {
+    .tabs button[aria-pressed="true"] { border-width: 3px; font-weight: 700; text-decoration: underline; }
+  }
+</style>
+</head>
+<body>
+<header>
+<h1>meterline gold: example dashboard</h1>
+<p class="note" id="intro">Reading the files of this folder.</p>
+<p class="note" id="basis">All days and months are UTC days and months. Each money column header names its currency.</p>
+</header>
+<main>
+<div class="tabs" id="tabs" role="group" aria-label="Files"></div>
+<p class="visually-hidden" id="status" aria-live="polite"></p>
+<div id="view"></div>
+</main>
+<script>
+"use strict";
+// Shows the CSV files of the folder it is served from, as they are: no sorting on a measure, no totals, no
+// recomputation. Serve ONE audience folder as the web root (spec section 11); never the gold root.
+var KNOWN = {
+  central: ["costs_month", "seats_month", "pools_month", "reconciliation_month", "data_quality", "groups_month",
+            "comparison_groups", "scenario_summary", "scenario_units", "scenario_persons", "alert_events",
+            "named_exceptions", "person_month", "people", "units"],
+  exec: ["groups_month", "costs_month", "seats_month", "pools_month", "scenario_summary"],
+  manager: ["groups_month", "named_exceptions"],
+  person: ["person_month", "person_day", "comparison"]
+};
+// Columns a privacy rule can withhold, per file that has a `hidden` column (spec 7.6.2). On a row with hidden = true an
+// empty one of these shows as "hidden"; on a row with hidden = false an empty value stays blank (it means none).
+var COVERED = {
+  costs_month: ["usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "cost_basis_label",
+                "invoice_usage"],
+  pools_month: ["gross_credits", "pool_used_credits", "overage_credits", "overage_amount", "pool_used_share",
+                "budget_state", "budget_crossed_on"],
+  seats_month: ["active_seats", "idle_seats"],
+  scenario_summary: ["persons_stopped"],
+  comparison: ["comparison_band"],
+  groups_month: ["persons", "active_persons", "active_days", "cost_ref", "p50_cost_ref", "p75_cost_ref", "p90_cost_ref",
+                 "p99_cost_ref", "top_decile_share", "is_final"]
+};
+// The columns that hold money, per file (the money columns of the writer's schemas, spec 6). Their header shows the
+// currency of the folder, read from the `currency` column of a file that has one (spec 6.5 to 6.8: the reference currency).
+var MONEY = {
+  "costs_month": ["usage_cost_source", "usage_cost_ref", "seat_cost", "total_cost_ref", "invoice_usage"],
+  "seats_month": ["seat_price", "seat_cost"],
+  "pools_month": ["overage_amount", "budget_amount"],
+  "reconciliation_month": ["actor_cost_source", "org_cost_source", "unallocated_cost_source", "cost_ref", "ref_vs_source_gap", "invoice_usage", "invoice_usage_gap", "invoice_seats", "invoice_seats_gap"],
+  "person_month": ["cost_ref", "cost_ref_by_provider", "projected_cost_ref"],
+  "person_day": ["cost_source", "cost_ref"],
+  "groups_month": ["cost_ref", "p50_cost_ref", "p75_cost_ref", "p90_cost_ref", "p99_cost_ref"],
+  "comparison_groups": ["p50_cost_ref", "p75_cost_ref", "p90_cost_ref"],
+  "comparison": ["own_cost_ref"],
+  "scenario_persons": ["cap", "cost_ref", "excess", "top_up_total"],
+  "scenario_units": ["envelope", "position", "excess", "top_up_total"],
+  "scenario_summary": ["persons_excess", "persons_top_up_total", "units_excess", "units_top_up_total"],
+  "alert_events": ["value", "threshold", "trailing_sum"]
+};
+var CURRENCY = null;
+var FIGURE_NOTE = "A suppressed cell shows as \"suppressed (reason)\"; its figures are not in the file.";
+
+var HIDDEN_NOTE = "A value shown as \"hidden\" is hidden for privacy; a blank value on a row with hidden = false means none.";
+
+// chart defaults: begin
+// Columns that are numbers but say nothing worth drawing; the first chart is of a cost column (spec 11).
+var CHART_SKIP = ["schema_version", "depth"];
+var COST_PREFERENCE = ["total_cost_ref", "usage_cost_ref", "cost_ref", "own_cost_ref", "seat_cost", "overage_amount"];
+var LABEL_PREFERENCE = ["cell_key", "cell_id", "provider", "scenario_id", "rule_id", "metric", "compare_cell", "day", "month"];
+function defaultChartColumn(columns) {
+  for (var i = 0; i < COST_PREFERENCE.length; i += 1) {
+    if (columns.indexOf(COST_PREFERENCE[i]) >= 0) { return COST_PREFERENCE[i]; }
+  }
+  for (var j = 0; j < columns.length; j += 1) {
+    if (/cost/.test(columns[j])) { return columns[j]; }
+  }
+  return columns[0];
+}
+function defaultLabelColumn(header) {
+  for (var i = 0; i < LABEL_PREFERENCE.length; i += 1) {
+    if (header.indexOf(LABEL_PREFERENCE[i]) >= 0) { return LABEL_PREFERENCE[i]; }
+  }
+  return header[Math.min(1, header.length - 1)];
+}
+// chart defaults: end
+
+function parseCsv(text) {
+  var rows = [], row = [], field = "", quoted = false, i = 0;
+  while (i < text.length) {
+    var c = text[i];
+    if (quoted) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
+        quoted = false; i += 1; continue;
+      }
+      field += c; i += 1; continue;
+    }
+    if (c === '"') { quoted = true; i += 1; continue; }
+    if (c === ",") { row.push(field); field = ""; i += 1; continue; }
+    if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; i += 1; continue; }
+    if (c === "\r") { i += 1; continue; }
+    field += c; i += 1;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function fetchText(name) {
+  return fetch(name + ".csv", { cache: "no-store" }).then(function (r) {
+    if (!r.ok) { return null; }
+    return r.text();
+  }).catch(function () { return null; });
+}
+
+function el(tag, text, cls) {
+  var e = document.createElement(tag);
+  if (text !== undefined) { e.textContent = text; }
+  if (cls) { e.className = cls; }
+  return e;
+}
+
+function detect(found) {
+  var has = function (n) { return found.indexOf(n) >= 0; };
+  if (has("people") || has("reconciliation_month") || has("person_month") && has("groups_month")) { return "central"; }
+  if (has("comparison") && !has("groups_month")) { return "person"; }
+  if (has("costs_month") && has("seats_month")) { return "exec"; }
+  if (has("groups_month")) { return "manager"; }
+  return "unknown";
+}
+
+// The currency of the folder: the `currency` column of the first file that has one (a build holds one currency).
+function currencyOf(files) {
+  for (var i = 0; i < files.length; i += 1) {
+    var rows = parseCsv(files[i].text);
+    var col = rows.length > 1 ? rows[0].indexOf("currency") : -1;
+    if (col >= 0 && rows[1][col] !== "") { return rows[1][col]; }
+  }
+  return null;
+}
+
+function headerText(name, h) {
+  if ((MONEY[name] || []).indexOf(h) < 0) { return h; }
+  return h + " (" + (CURRENCY || "reference currency") + ")";
+}
+
+function renderTable(name, rows) {
+  var wrap = el("div", undefined, "scroll");
+  // a keyboard user can focus the region and scroll it sideways; its name says which file it holds
+  wrap.setAttribute("tabindex", "0");
+  wrap.setAttribute("role", "region");
+  wrap.setAttribute("aria-label", name + ".csv, as a table");
+  var table = el("table");
+  table.appendChild(el("caption", name + ".csv"));
+  var thead = el("thead"), tbody = el("tbody");
+  var head = el("tr");
+  rows[0].forEach(function (h) {
+    var th = el("th", headerText(name, h));
+    th.setAttribute("scope", "col");
+    head.appendChild(th);
+  });
+  thead.appendChild(head);
+  table.appendChild(thead);
+  var iSup = rows[0].indexOf("suppressed"), iReason = rows[0].indexOf("suppression_reason");
+  var iFirstFigure = rows[0].indexOf("persons");
+  var iHidden = rows[0].indexOf("hidden");
+  var covered = iHidden >= 0 ? (COVERED[name] || []) : [];
+  rows.slice(1).forEach(function (r) {
+    var tr = el("tr");
+    var suppressed = iSup >= 0 && r[iSup] === "true";
+    r.forEach(function (v, j) {
+      var td;
+      if (suppressed && iFirstFigure >= 0 && j >= iFirstFigure) {
+        td = el("td", j === iFirstFigure ? "suppressed (" + r[iReason] + ")" : "", "suppressed");
+      } else if (v === "" && iHidden >= 0 && r[iHidden] === "true" && covered.indexOf(rows[0][j]) >= 0) {
+        td = el("td", "hidden", "suppressed");
+      } else {
+        td = el("td", v === "" ? "" : v, v === "" ? "empty" : undefined);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+// Keeps the two identifying columns after schema_version (month and the cell, provider or scenario) in view when the
+// table scrolls sideways: the cells get fixed-width sticky classes (a longer value is cut with an ellipsis and keeps
+// its full text in the title). The classes carry the widths, so the script sets no style.
+function freezeColumns(table) {
+  for (var r = 0; r < table.rows.length; r += 1) {
+    for (var c = 1; c <= 2; c += 1) {
+      var cell = table.rows[r].cells[c];
+      if (!cell) { continue; }
+      cell.classList.add("frozen-" + c);
+      if (cell.textContent.length > 12) { cell.setAttribute("title", cell.textContent); }
+    }
+  }
+}
+
+// Inline SVG bars of one column of one file, in the file's own row order.
+function renderChart(name, rows, column, labelColumn) {
+  var iV = rows[0].indexOf(column), iL = rows[0].indexOf(labelColumn);
+  var data = [];
+  rows.slice(1).forEach(function (r) {
+    var v = parseFloat(r[iV]);
+    if (r[iV] !== "" && !isNaN(v)) { data.push({ label: r[iL], value: v, text: r[iV] }); }
+  });
+  var ns = "http://www.w3.org/2000/svg";
+  var svg = document.createElementNS(ns, "svg");
+  var rowH = 18, left = 160, width = 520;
+  svg.setAttribute("viewBox", "0 0 " + (left + width + 80) + " " + (Math.max(data.length, 1) * rowH + 6));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", column + " of " + name + ", in file order");
+  var top = 0;
+  data.forEach(function (d) { if (d.value > top) { top = d.value; } });
+  data.forEach(function (d, i) {
+    var y = i * rowH + 3;
+    var label = document.createElementNS(ns, "text");
+    label.setAttribute("x", "0"); label.setAttribute("y", String(y + 11));
+    label.textContent = d.label.length > 26 ? d.label.slice(0, 25) + "…" : d.label;
+    var bar = document.createElementNS(ns, "rect");
+    bar.setAttribute("x", String(left)); bar.setAttribute("y", String(y));
+    bar.setAttribute("height", String(rowH - 6));
+    bar.setAttribute("width", String(top > 0 ? Math.max(1, (d.value / top) * width) : 1));
+    bar.setAttribute("fill", "var(--bar)");
+    var value = document.createElementNS(ns, "text");
+    value.setAttribute("x", String(left + (top > 0 ? Math.max(1, (d.value / top) * width) : 1) + 4));
+    value.setAttribute("y", String(y + 10));
+    value.textContent = d.text;
+    svg.appendChild(label); svg.appendChild(bar); svg.appendChild(value);
+  });
+  return svg;
+}
+
+function showFile(name, text, view) {
+  view.textContent = "";
+  var all = parseCsv(text);
+  if (!all.length) { view.appendChild(el("p", name + ".csv is empty.", "err")); return; }
+  var header = all[0], body = all.slice(1);
+  var iMonth = header.indexOf("month");
+  var months = [];
+  if (iMonth >= 0) {
+    body.forEach(function (r) { if (months.indexOf(r[iMonth]) < 0) { months.push(r[iMonth]); } });
+  }
+  var heading = el("h2");
+  view.appendChild(heading);
+  if (header.indexOf("suppressed") >= 0) { view.appendChild(el("p", FIGURE_NOTE, "note")); }
+  if (header.indexOf("hidden") >= 0) { view.appendChild(el("p", HIDDEN_NOTE, "note")); }
+  // one month at a time by default, the latest; a file with a single month has no selector
+  var mon = null;
+  if (months.length > 1) {
+    var monBox = el("p", undefined, "month");
+    mon = el("select");
+    mon.setAttribute("aria-label", "Month shown");
+    var allOption = el("option", "all months"); allOption.value = ""; mon.appendChild(allOption);
+    months.forEach(function (m) { var o = el("option", m); o.value = m; mon.appendChild(o); });
+    var latest = months.reduce(function (a, b) { return a > b ? a : b; });
+    mon.value = latest;
+    monBox.appendChild(el("span", "Month"));
+    monBox.appendChild(mon);
+    view.appendChild(monBox);
+  }
+  var tableBox = el("div");
+  view.appendChild(tableBox);
+  var shown = function () {
+    var month = mon ? mon.value : "";
+    return [header].concat(body.filter(function (r) { return month === "" || r[iMonth] === month; }));
+  };
+  var numeric = header.filter(function (h, j) {
+    return CHART_SKIP.indexOf(h) < 0 && body.some(function (r) { return r[j] !== "" && /^-?[0-9.]+$/.test(r[j]); });
+  });
+  var col = null, lab = null, holder = null, redrawChart = function () {};
+  if (numeric.length && body.length) {
+    var box = el("div", undefined, "chart");
+    col = el("select"); lab = el("select");
+    col.setAttribute("aria-label", "Column drawn as bars");
+    lab.setAttribute("aria-label", "Column that labels the bars");
+    numeric.forEach(function (h) { var o = el("option", h); o.value = h; col.appendChild(o); });
+    header.forEach(function (h) { var o = el("option", h); o.value = h; lab.appendChild(o); });
+    col.value = defaultChartColumn(numeric);
+    lab.value = defaultLabelColumn(header);
+    holder = el("div");
+    redrawChart = function () { holder.textContent = ""; holder.appendChild(renderChart(name, shown(), col.value, lab.value)); };
+    col.addEventListener("change", redrawChart); lab.addEventListener("change", redrawChart);
+    box.appendChild(el("span", "Bars of "));
+    box.appendChild(col);
+    box.appendChild(el("span", " labelled by "));
+    box.appendChild(lab);
+    box.appendChild(holder);
+    view.appendChild(box);
+  }
+  var draw = function () {
+    var rows = shown();
+    heading.textContent = name + ".csv (" + (rows.length - 1) + " of " + body.length + " rows, in the file's own order)";
+    tableBox.textContent = "";
+    var wrap = renderTable(name, rows);
+    tableBox.appendChild(wrap);
+    freezeColumns(wrap.firstChild);
+    redrawChart();
+  };
+  if (mon) { mon.addEventListener("change", draw); }
+  draw();
+}
+
+(function main() {
+  var candidates = [];
+  Object.keys(KNOWN).forEach(function (a) {
+    KNOWN[a].forEach(function (n) { if (candidates.indexOf(n) < 0) { candidates.push(n); } });
+  });
+  var all = candidates.concat(["comparison"]);
+  var uniq = all.filter(function (n, i) { return all.indexOf(n) === i; });
+  Promise.all(uniq.map(function (n) { return fetchText(n).then(function (t) { return { name: n, text: t }; }); }))
+    .then(function (results) {
+      var present = results.filter(function (r) { return r.text !== null; });
+      var intro = document.getElementById("intro");
+      if (!present.length) {
+        intro.textContent = "No gold file found here. Serve one audience folder (central, exec, a manager or a person " +
+          "folder) as the web root, with index.html copied into it.";
+        intro.className = "note err";
+        return;
+      }
+      CURRENCY = currencyOf(present);
+      var audience = detect(present.map(function (r) { return r.name; }));
+      var order = (KNOWN[audience] || []).filter(function (n) {
+        return present.some(function (r) { return r.name === n; });
+      });
+      present.forEach(function (r) { if (order.indexOf(r.name) < 0) { order.push(r.name); } });
+      intro.textContent = "Audience detected from the files: " + audience + ". Every file is shown as it is, in its own " +
+        "row order. Nothing here is recomputed or sorted by a measure. " +
+        (CURRENCY ? "Currency: " + CURRENCY + "." : "This folder holds no file that names the currency; money headers say \"reference currency\".");
+      var tabs = document.getElementById("tabs"), view = document.getElementById("view");
+      var byName = {};
+      present.forEach(function (r) { byName[r.name] = r.text; });
+      order.forEach(function (n, i) {
+        var b = el("button", n); b.type = "button";
+        b.setAttribute("aria-pressed", "false");
+        b.addEventListener("click", function () {
+          Array.prototype.forEach.call(tabs.children, function (c) { c.setAttribute("aria-pressed", "false"); });
+          b.setAttribute("aria-pressed", "true");
+          showFile(n, byName[n], view);
+          document.getElementById("status").textContent = "Showing " + n + ".csv";
+        });
+        tabs.appendChild(b);
+        if (i === 0) { b.click(); }
+      });
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+"""The @@DIST@@ command line and its Python entry point ``run``.
+
+Commands: ``backfill --since --provider-account-id``, ``daily --provider-account-id`` and ``rebuild``. Exit codes
+(docs/reference/connector-contract.md): 0 ok; 1 transient (run again later); 2 input or checks; 3 permanent provider
+refusal. The key comes from ``@@ENV@@``.
+"""
+
+import argparse
+import logging
+import os
+import random
+import shutil
+import sys
+import time
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence
+
+from meterline import KINDS, RunResult, batch_failures, note_failure, result_of_run, run_manifests
+from meterline.published import drop_unchanged, load_published
+from meterline.run import (
+    EXIT_CHECKS,
+    EXIT_OK,
+    EXIT_PERMANENT,
+    EXIT_TRANSIENT,
+    UnknownFields,
+    WritePhase,
+    exit_code_of_status,
+    note_unknown_fields,
+    unknown_fields_of,
+    warn_unknown_fields,
+)
+from meterline.state import StateError, is_day_list, is_relative_path, read_state, state_damaged_message, write_state
+from meterline.writers import write_jsonl
+
+from .client import ApiError, Client
+from .fetch import ENDPOINTS, BadAnswer, RunManifest, batch_id_for, endpoint_of, fetch_window, query_windows, read_raw
+from .normalise import KNOWN_SHAPES, is_final, normalise
+
+logger = logging.getLogger("@@PKG@@.cli")
+
+KEY_ENV = "@@ENV@@"
+PRIVATE_UMASK = 0o077  # files 0600, folders 0700, whatever the caller's umask
+# `daily` reads the last closed days again: the provider may revise them. A day is final FINAL_AFTER_DAYS (normalise.py, 4)
+# days after it ended, and the oldest day read must be final in that run, so this is that number plus one: 5. The contract's
+# conservative default for a provider that documents nothing; change it only with FINAL_AFTER_DAYS, from the documentation.
+REREAD_DAYS = 5
+PUBLISHED_KINDS = {kind: KINDS[kind] for _, kind in ENDPOINTS.values()}  # the record kinds this connector writes
+
+
+def _empty_state() -> Dict[str, Any]:
+    return {"days_loaded": [], "pending": None}
+
+
+def _check_state(state: Any) -> None:
+    """Raise ``StateError`` (naming the first thing wrong, never a value) unless ``state`` has the shape this program writes."""
+    if not isinstance(state, dict):
+        raise StateError("it does not hold a JSON object")
+    for key in _empty_state():
+        if key not in state:
+            raise StateError("the key %s is missing" % key)
+    if not is_day_list(state["days_loaded"]):
+        raise StateError("days_loaded is not a list of YYYY-MM-DD dates")
+    pending = state["pending"]
+    if pending is None:
+        return
+    if not isinstance(pending, dict) or not isinstance(pending.get("command"), str):
+        raise StateError("pending is not a block with a command")
+    files = pending.get("raw_files")
+    if not isinstance(files, list) or not all(is_relative_path(f) for f in files):
+        raise StateError("pending.raw_files is not a list of relative file paths")
+
+
+def _api_failed(status: int) -> int:
+    code = exit_code_of_status(status)
+    note_failure(status)
+    if code == EXIT_PERMANENT:
+        print("permanent: the API refused the request (HTTP status %d); fix the key, its scope or the identifier it "
+              "names, then run the same command again. Progress is kept." % status, file=sys.stderr)
+    else:
+        print("transient: re-run later. API request failed (HTTP status %d); progress is kept, run the same command "
+              "again to resume" % status, file=sys.stderr)
+    return code
+
+
+def _days(first: date, last: date) -> List[date]:
+    return [first + timedelta(days=n) for n in range((last - first).days + 1)]
+
+
+def _problems(by_kind: Dict[str, List[Any]], today: date) -> List[str]:
+    """The batch checks of every kind, run before anything is written: records that do not validate, repeated keys."""
+    return ["%s: %s" % (kind, message) for kind, records in by_kind.items() for message in batch_failures(records, today)]
+
+
+def _write_fresh(data_dir: Path, batch_id: str, by_kind: Dict[str, List[Any]]) -> Dict[str, int]:
+    """The revision rule, kind by kind: write the records whose content differs from the latest published one."""
+    published = load_published(data_dir, PUBLISHED_KINDS)
+    counts: Dict[str, int] = {}
+    for kind, records in by_kind.items():
+        fresh = drop_unchanged(records, published[kind])
+        if fresh:
+            counts[kind] = write_jsonl(fresh, data_dir / "records" / kind / (batch_id + ".jsonl"))
+    return counts
+
+
+def _publish(data_dir: Path, state: Dict[str, Any], days: List[date], batch_id: str, pulled_at: datetime,
+             raw_files: List[str], windows: List[str], command: str, account: str) -> int:
+    """Normalise the raw files of this run and check the batch of every kind; only then write records, the manifest and
+    the state."""
+    found: UnknownFields = {}
+    by_kind: Dict[str, List[Any]] = {kind: [] for _, kind in ENDPOINTS.values()}
+    try:
+        for relative in raw_files:
+            endpoint = endpoint_of(relative)
+            pages = read_raw(data_dir, relative)
+            for page in pages:
+                note_unknown_fields(found, endpoint, page, KNOWN_SHAPES[endpoint])
+            by_kind[ENDPOINTS[endpoint][1]].extend(normalise(endpoint, pages, account, batch_id, pulled_at))
+    except (KeyError, ValueError, TypeError) as exc:
+        RunManifest(command, batch_id, pulled_at, account, status="failed", raw_files=raw_files,
+                    failures=["response not in the documented shape (%s)" % type(exc).__name__]).write(data_dir)
+        print("response not in the documented shape; nothing was published", file=sys.stderr)
+        return EXIT_CHECKS
+    manifest = RunManifest(command, batch_id, pulled_at, account, windows=windows, raw_files=raw_files,
+                           unknown_fields=unknown_fields_of(found))
+    problems = _problems(by_kind, pulled_at.date())
+    if problems:
+        manifest.status, manifest.failures = "failed", problems
+        manifest.write(data_dir)
+        print("checks failed: nothing was published (%d failure(s))" % len(problems), file=sys.stderr)
+        for message in problems:
+            print("  - " + message, file=sys.stderr)
+        return EXIT_CHECKS
+    warn_unknown_fields("@@DIST@@", manifest.unknown_fields)
+    with WritePhase(data_dir, batch_id) as phase:
+        manifest.published_counts = _write_fresh(data_dir, batch_id, by_kind)
+        manifest.write(data_dir)
+        # A day with no row is not loaded until it is final: the provider may still fill it in (contract, "Re-read depth").
+        with_rows = {record.period_start for records in by_kind.values() for record in records}
+        done = {d.isoformat() for d in days if d in with_rows or is_final(d, pulled_at)}
+        state["days_loaded"] = sorted(set(state["days_loaded"]) | done)  # state last, after the records
+        state["pending"] = None
+        write_state(data_dir, state)
+    return EXIT_TRANSIENT if phase.failed else EXIT_OK
+
+
+def _run_pull(command: str, client: Client, data_dir: Path, first: date, last: date, pulled_at: datetime,
+              state: Dict[str, Any], account: str) -> int:
+    batch_id = batch_id_for(pulled_at)
+    if (data_dir / "runs" / (batch_id + ".json")).exists():
+        print("a run already finished in the same second (batch %s); wait a second and run again. Nothing was "
+              "fetched or changed." % batch_id, file=sys.stderr)
+        return EXIT_CHECKS
+    days = _days(first, last)
+    raw_files: List[str] = []
+    try:
+        for first_day, last_day in query_windows(first, last):  # WINDOW_DAYS days per query: one, the contract's default
+            for endpoint in ENDPOINTS:
+                raw_files.append(fetch_window(client, data_dir, endpoint, first_day, last_day, batch_id, pulled_at))
+    except ApiError as exc:
+        state["pending"] = {"command": command, "raw_files": raw_files}  # a real connector resumes from these
+        write_state(data_dir, state)
+        return _api_failed(exc.status)
+    except BadAnswer as exc:  # a page cursor that is not a string or that came back: the answer is not in the documented shape
+        print("an answer of the API is not in the documented shape (%s); nothing was published" % exc, file=sys.stderr)
+        return EXIT_CHECKS
+    except ValueError:  # a 200 answer whose body is not JSON
+        print("an answer of the API is not JSON; nothing was published", file=sys.stderr)
+        return EXIT_CHECKS
+    windows = ["%s/%s" % (days[0].isoformat(), days[-1].isoformat())] if days else []
+    return _publish(data_dir, state, days, batch_id, pulled_at, raw_files, windows, command, account)
+
+
+def run_rebuild(data_dir: Path) -> int:
+    """Re-create ``records/`` from the raw files and the published run manifests. No request, no key. The account comes
+    from each manifest."""
+    shutil.rmtree(data_dir / "records", ignore_errors=True)
+    for path in sorted((data_dir / "runs").glob("*.json")):
+        manifest = RunManifest.read(path)
+        if manifest.status != "published":
+            continue
+        by_kind: Dict[str, List[Any]] = {kind: [] for _, kind in ENDPOINTS.values()}
+        for relative in manifest.raw_files:
+            endpoint = endpoint_of(relative)
+            by_kind[ENDPOINTS[endpoint][1]].extend(
+                normalise(endpoint, read_raw(data_dir, relative), manifest.provider_account_id, manifest.batch_id, manifest.pulled_at))
+        _write_fresh(data_dir, manifest.batch_id, by_kind)
+    return EXIT_OK
+
+
+_RUN_OPTIONS = ("since", "provider_account_id", "rate_per_minute", "max_retry_after")
+_OPTIONS = {"backfill": _RUN_OPTIONS, "daily": _RUN_OPTIONS, "rebuild": ()}
+
+
+def run(command: str, *, data_dir: Any, credentials: Any = None, transport: Any = None,
+        clock: Callable[[], Any] = time.monotonic, sleep: Callable[[Any], Any] = time.sleep,
+        now: Optional[Callable[[], datetime]] = None, jitter: Callable[[], Any] = random.random,
+        wall: Callable[[], Any] = time.time, **options: Any) -> RunResult:
+    """Run one command from Python and return its ``RunResult``; a failed run returns its exit code, it does not raise.
+
+    ``command`` is ``"backfill"``, ``"daily"`` or ``"rebuild"``. ``options`` are the command-line options under their
+    Python names (``since``, ``provider_account_id``, ``rate_per_minute``, ``max_retry_after``); ``provider_account_id``
+    is required by ``backfill`` and ``daily`` and is kept in the run manifest for ``rebuild``. An unknown option, or a
+    missing required one, raises ``TypeError``.
+    ``credentials`` maps ``@@ENV@@`` to the key, or is a function returning such a mapping; ``None`` reads the
+    environment. ``transport`` is an httpx transport (``FakeAPI().transport``). Everything written under ``data_dir`` is
+    readable by its owner only, whatever the caller's umask."""
+    if command not in _OPTIONS:
+        raise ValueError("command must be one of %s, got %r" % (", ".join(_OPTIONS), command))
+    unknown = sorted(set(options) - set(_OPTIONS[command]))
+    if unknown:
+        raise TypeError("run(%r) got an unexpected option: %s" % (command, ", ".join(unknown)))
+    data_path = Path(data_dir)
+    before = run_manifests(data_path)
+    old_umask = os.umask(PRIVATE_UMASK)
+    try:
+        code = _run_command(command, data_path, credentials, transport, options, clock, sleep, now, jitter, wall)
+    finally:
+        os.umask(old_umask)
+    return result_of_run(data_path, code, before)
+
+
+def _run_command(command: str, data_dir: Path, credentials: Any, transport: Any, options: Dict[str, Any],
+                 clock: Callable[[], Any], sleep: Callable[[Any], Any], now: Optional[Callable[[], datetime]],
+                 jitter: Callable[[], Any], wall: Callable[[], Any]) -> int:
+    if command == "rebuild":
+        return run_rebuild(data_dir)
+    since = options.get("since")
+    if isinstance(since, str):
+        since = date.fromisoformat(since)
+    if command == "backfill" and since is None:
+        raise TypeError("run('backfill') needs the option since")
+    account = options.get("provider_account_id")
+    if account is None:
+        raise TypeError("run(%r) needs the option provider_account_id" % command)
+    if not str(account).strip():
+        print("--provider-account-id must not be empty", file=sys.stderr)
+        return EXIT_CHECKS
+    rate = options.get("rate_per_minute", 60)
+    if rate < 1:
+        print("--rate-per-minute must be at least 1", file=sys.stderr)
+        return EXIT_CHECKS
+    source = (credentials() if callable(credentials) else credentials) if credentials is not None else os.environ
+    key = source.get(KEY_ENV) or ""
+    if not key:
+        print("%s must be set in the environment" % KEY_ENV, file=sys.stderr)
+        return EXIT_CHECKS
+    pulled_at = (now or (lambda: datetime.now(timezone.utc)))().astimezone(timezone.utc).replace(microsecond=0)
+    yesterday = pulled_at.date() - timedelta(days=1)
+    try:
+        state = read_state(data_dir, _check_state)
+    except StateError as exc:
+        print(state_damaged_message(data_dir, exc), file=sys.stderr)
+        return EXIT_CHECKS
+    if command == "backfill":
+        first = since
+        state = state or _empty_state()
+    else:
+        if state is None and since is None:
+            print("no state file: daily cannot tell which days are loaded. Pass --since YYYY-MM-DD or run backfill.", file=sys.stderr)
+            return EXIT_CHECKS
+        reread_start = yesterday - timedelta(days=REREAD_DAYS - 1)
+        if state is None:  # the first daily: --since is where it starts, but never later than the re-read window
+            first, state = min(since, reread_start), _empty_state()
+        else:  # R04: a state with no loaded day (a run that published nothing) is normal; --since matters only without state
+            if since is not None:  # R04: with a state file, --since is ignored and the run says so (no value of the state in it)
+                print("--since is ignored: a state file exists (%s); daily starts after the last loaded day" % (data_dir / "state.json"),
+                      file=sys.stderr)
+            loaded = [date.fromisoformat(d) for d in state["days_loaded"]]
+            first = min(max(loaded) + timedelta(days=1), reread_start) if loaded else reread_start
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with Client(key, transport=transport, rate_per_minute=rate, clock=clock, sleep=sleep, jitter=jitter, wall=wall,
+                max_retry_after=options.get("max_retry_after", 300)) as client:
+        return _run_pull(command, client, data_dir, first, yesterday, pulled_at, state, str(account))
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="@@DIST@@", description=__doc__.split("\n")[0])
+    parser.add_argument("--data-dir", default="exports/@@DIST@@")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("backfill", "daily"):
+        p = sub.add_parser(name)
+        p.add_argument("--since", type=date.fromisoformat, required=name == "backfill")
+        p.add_argument("--provider-account-id", dest="provider_account_id", required=True)
+        p.add_argument("--rate-per-minute", dest="rate_per_minute", type=int, default=60)
+        p.add_argument("--max-retry-after", dest="max_retry_after", type=int, default=300)
+    sub.add_parser("rebuild")
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None, *, transport: Any = None, clock: Callable[[], Any] = time.monotonic,
+         sleep: Callable[[Any], Any] = time.sleep, now: Optional[Callable[[], datetime]] = None,
+         jitter: Callable[[], Any] = random.random, wall: Callable[[], Any] = time.time) -> int:
+    args = _parser().parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    options = {name: getattr(args, name) for name in _OPTIONS[args.command]}
+    result = run(args.command, data_dir=args.data_dir, transport=transport, clock=clock, sleep=sleep, now=now,
+                 jitter=jitter, wall=wall, **options)
+    return result.exit_code
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

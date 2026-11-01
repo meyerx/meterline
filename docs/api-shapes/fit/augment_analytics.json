@@ -1,0 +1,12 @@
+{
+  "data": [
+    {"date": "2026-10-01", "user_email": "fay.lund@example.com", "service_account_name": null, "model": "model-a1",
+     "credits_consumed": 42.5,
+     "cost_metrics": {"billed_amount_usd": 0.85},
+     "token_metrics": {"input_tokens": 9000, "cache_read_tokens": 3000, "cache_write_tokens": 500, "output_tokens": 1200}},
+    {"date": "2026-10-01", "user_email": null, "service_account_name": "ci-bot", "model": "model-a1",
+     "credits_consumed": 10,
+     "cost_metrics": {"billed_amount_usd": 0.2},
+     "token_metrics": {"input_tokens": 2000, "cache_read_tokens": 0, "cache_write_tokens": 0, "output_tokens": 300}}
+  ]
+}

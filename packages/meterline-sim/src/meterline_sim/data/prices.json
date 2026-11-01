@@ -1,0 +1,92 @@
+{
+  "price_table_format": 1,
+  "label": "Invented example values, except credit_price, which mirrors a constant of the Copilot connector. Not any provider's price list or any organisation's contract.",
+  "currency": "USD",
+  "token_prices": [
+    {
+      "provider": "anthropic",
+      "model": "model-a-light",
+      "valid_from": "2000-01-01",
+      "per_million": {
+        "input_uncached": "0.70",
+        "cache_read": "0.07",
+        "cache_write_5m": "0.90",
+        "cache_write_1h": "1.40",
+        "output": "3.50"
+      }
+    },
+    {
+      "provider": "anthropic",
+      "model": "model-a-standard",
+      "valid_from": "2000-01-01",
+      "per_million": {
+        "input_uncached": "2.50",
+        "cache_read": "0.25",
+        "cache_write_5m": "3.10",
+        "cache_write_1h": "5.00",
+        "output": "12.50"
+      }
+    },
+    {
+      "provider": "anthropic",
+      "model": "model-a-premium",
+      "valid_from": "2000-01-01",
+      "per_million": {
+        "input_uncached": "12.00",
+        "cache_read": "1.20",
+        "cache_write_5m": "15.00",
+        "cache_write_1h": "24.00",
+        "output": "60.00"
+      }
+    },
+    {
+      "provider": "litellm",
+      "model": "model-a-standard",
+      "valid_from": "2000-01-01",
+      "per_million": {
+        "input_uncached": "2.60",
+        "cache_read": "0.26",
+        "cache_write_5m": "3.20",
+        "cache_write_1h": "3.20",
+        "output": "13.00"
+      }
+    },
+    {
+      "provider": "litellm",
+      "model": "model-b-light",
+      "valid_from": "2000-01-01",
+      "per_million": {
+        "input_uncached": "0.22",
+        "cache_read": "0.06",
+        "cache_write_5m": "0.27",
+        "cache_write_1h": "0.27",
+        "output": "0.88"
+      }
+    },
+    {
+      "provider": "litellm",
+      "model": "selfhosted-c-small",
+      "valid_from": "2000-01-01",
+      "per_million": null
+    }
+  ],
+  "claude_enterprise": {
+    "seat_per_month": "27.00",
+    "usage_discount": "0"
+  },
+  "github_copilot": {
+    "credit_price": "0.01",
+    "plans": {
+      "business": {
+        "seat_per_month": "23.00",
+        "included_credits_per_seat": "1500"
+      }
+    },
+    "credits_per_interaction": {
+      "model-b-light": "2.0",
+      "model-a-standard": "8.0",
+      "model-b-premium": "25.0"
+    },
+    "budget_usd": null
+  }
+}

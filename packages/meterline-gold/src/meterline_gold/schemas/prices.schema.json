@@ -1,0 +1,285 @@
+{
+  "$defs": {
+    "Included": {
+      "additionalProperties": false,
+      "properties": {
+        "product": {
+          "title": "Product",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "product"
+      ],
+      "title": "Included",
+      "type": "object"
+    },
+    "ModelEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "title": "Family",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "tier": {
+          "title": "Tier",
+          "type": "string"
+        },
+        "vendor": {
+          "title": "Vendor",
+          "type": "string"
+        }
+      },
+      "required": [
+        "model",
+        "vendor",
+        "family",
+        "tier"
+      ],
+      "title": "ModelEntry",
+      "type": "object"
+    },
+    "PerMillion": {
+      "additionalProperties": false,
+      "properties": {
+        "cache_read": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+          "title": "Cache Read",
+          "type": "string"
+        },
+        "cache_write_1h": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cache Write 1H"
+        },
+        "cache_write_5m": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+          "title": "Cache Write 5M",
+          "type": "string"
+        },
+        "input_uncached": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+          "title": "Input Uncached",
+          "type": "string"
+        },
+        "output": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,6})?$",
+          "title": "Output",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_uncached",
+        "cache_read",
+        "cache_write_5m",
+        "output"
+      ],
+      "title": "PerMillion",
+      "type": "object"
+    },
+    "SeatPrice": {
+      "additionalProperties": false,
+      "properties": {
+        "included_credits": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Included Credits"
+        },
+        "per_month": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "Per Month",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "provider_account_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Account Id"
+        },
+        "valid_from": {
+          "format": "date",
+          "title": "Valid From",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "valid_from",
+        "per_month"
+      ],
+      "title": "SeatPrice",
+      "type": "object"
+    },
+    "TokenPrice": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "per_million": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PerMillion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date",
+          "title": "Valid From",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "valid_from"
+      ],
+      "title": "TokenPrice",
+      "type": "object"
+    },
+    "UnitPrice": {
+      "additionalProperties": false,
+      "properties": {
+        "price": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "Price",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "unit": {
+          "title": "Unit",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date",
+          "title": "Valid From",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "unit",
+        "valid_from",
+        "price"
+      ],
+      "title": "UnitPrice",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "as_of": {
+      "format": "date",
+      "title": "As Of",
+      "type": "string"
+    },
+    "currency": {
+      "title": "Currency",
+      "type": "string"
+    },
+    "included": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Included"
+      },
+      "title": "Included",
+      "type": "array"
+    },
+    "models": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModelEntry"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "price_list_format": {
+      "const": 1,
+      "title": "Price List Format",
+      "type": "integer"
+    },
+    "seats": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SeatPrice"
+      },
+      "title": "Seats",
+      "type": "array"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "token_prices": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TokenPrice"
+      },
+      "title": "Token Prices",
+      "type": "array"
+    },
+    "unit_prices": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/UnitPrice"
+      },
+      "title": "Unit Prices",
+      "type": "array"
+    }
+  },
+  "required": [
+    "price_list_format",
+    "as_of",
+    "source",
+    "currency"
+  ],
+  "title": "PriceList",
+  "type": "object"
+}

@@ -1,0 +1,16 @@
+.env
+.env.*
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+exports/
+receipts/
+/sim-out/
+/gold/
+/exec-report.html
+/job-data/

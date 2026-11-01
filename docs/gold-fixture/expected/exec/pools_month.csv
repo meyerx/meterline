@@ -1,0 +1,2 @@
+schema_version,month,provider,provider_account_id,seats_billed,included_per_seat,pool_credits,gross_credits,pool_used_credits,overage_credits,overage_amount,pool_used_share,budget_amount,budget_state,budget_crossed_on,currency,is_final,hidden
+2.0,2026-05,github_copilot,org:fixture-co,5,73,365,,,,,,0.98,,,USD,false,true

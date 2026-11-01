@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of exec/pools_month.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8. Retired names: schema_version 2.0 renamed a column (org_id is now provider_account_id).",
+  "properties": {
+    "budget_amount": {
+      "description": "Budget for the provider and provider account from the policy.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "budget_crossed_on": {
+      "description": "First day on which the overage passed the budget.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": true,
+      "x-unit": "date"
+    },
+    "budget_state": {
+      "description": "none without a budget, crossed once overage passed it, otherwise within.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": true,
+      "x-unit": "text"
+    },
+    "currency": {
+      "description": "ISO 4217 reference currency of the row.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "gross_credits": {
+      "description": "Credits billed in the month, before the pool is applied.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": true,
+      "x-unit": "count"
+    },
+    "hidden": {
+      "description": "True when a privacy rule withheld at least one covered value of the row; empty values then mean withheld.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "included_per_seat": {
+      "description": "Credits included per seat each month.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "is_final": {
+      "description": "True when the provider will no longer revise the figure.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "overage_amount": {
+      "description": "Billed amount for the credits beyond the pool.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": true,
+      "x-unit": "currency"
+    },
+    "overage_credits": {
+      "description": "Credits beyond the pool.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": true,
+      "x-unit": "count"
+    },
+    "pool_credits": {
+      "description": "Credit pool: seats_billed times included_per_seat.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "pool_used_credits": {
+      "description": "Credits covered by the pool.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": true,
+      "x-unit": "count"
+    },
+    "pool_used_share": {
+      "description": "pool_used_credits divided by pool_credits.",
+      "pattern": "^-?[0-9]+\\.[0-9]{4}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "ratio",
+      "x-hidden-covered": true,
+      "x-unit": "ratio"
+    },
+    "provider": {
+      "description": "Provider the usage or seats came from, as the silver records name it.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "provider_account_id": {
+      "description": "Provider account label from the silver records; empty only where seats are matched on provider alone.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "seats_billed": {
+      "description": "Distinct seat holders on any day of the month.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    }
+  },
+  "required": [
+    "schema_version",
+    "month",
+    "provider",
+    "provider_account_id",
+    "seats_billed",
+    "included_per_seat",
+    "pool_credits",
+    "gross_credits",
+    "pool_used_credits",
+    "overage_credits",
+    "overage_amount",
+    "pool_used_share",
+    "budget_amount",
+    "budget_state",
+    "budget_crossed_on",
+    "currency",
+    "is_final",
+    "hidden"
+  ],
+  "title": "gold-dataset-exec-pools_month",
+  "type": "object",
+  "x-audiences": [
+    "exec"
+  ],
+  "x-columns": [
+    "schema_version",
+    "month",
+    "provider",
+    "provider_account_id",
+    "seats_billed",
+    "included_per_seat",
+    "pool_credits",
+    "gross_credits",
+    "pool_used_credits",
+    "overage_credits",
+    "overage_amount",
+    "pool_used_share",
+    "budget_amount",
+    "budget_state",
+    "budget_crossed_on",
+    "currency",
+    "is_final",
+    "hidden"
+  ],
+  "x-cost-column-rule": "`overage_amount` is billed money for credits beyond the pool and is part of no `cost_ref`. The credit columns are quantities, not currency.",
+  "x-dataset": "pools_month",
+  "x-files": [
+    "exec/pools_month.csv"
+  ],
+  "x-grain": "One row per month, provider and provider account with a credit pool.",
+  "x-joins": {
+    "month": [
+      "seats_month.month"
+    ],
+    "provider": [
+      "seats_month.provider"
+    ],
+    "provider_account_id": [
+      "seats_month.provider_account_id"
+    ]
+  },
+  "x-primary-key": [
+    "month",
+    "provider",
+    "provider_account_id"
+  ]
+}

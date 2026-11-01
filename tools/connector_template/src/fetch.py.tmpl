@@ -1,0 +1,153 @@
+"""Fetching: one query per endpoint and window, paged, kept as received in one file under ``raw/``, and the run manifest.
+
+A query asks for ``WINDOW_DAYS`` closed UTC days of one endpoint and follows the provider's page cursor until there is
+none. All its pages go into one raw file, ``raw/<endpoint>/<window>/<batch_id>.json.gz``: gzip JSON with deterministic bytes
+holding ``{"endpoint", "window", "request_url", "pulled_at", "pages": [{"status", "body"}]}``, where ``body`` is the
+response text exactly as received (docs/reference/connector-contract.md, "Raw page naming for a paged endpoint"). The
+request URL has no page cursor and, since the key travels in a header, no key. A raw file is never overwritten.
+"""
+
+import gzip
+import json
+import os
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+from urllib.parse import urlencode
+
+from .client import BASE_URL, Client
+
+TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+# The contract's default when the provider documents nothing is a query of one day, the smallest window, so that no limit
+# the provider did not document can cut it. Raise it only to the largest range the provider documents for one query, and
+# then send the range in ``fetch_window`` (the stub's API takes one ``date``).
+WINDOW_DAYS = 1
+PAGE_PARAM = "page"  # the query parameter that carries the cursor back; the provider's own name replaces it
+NEXT_PAGE_FIELD = "next_page"  # the answer field that holds the next cursor, null on the last page
+
+# endpoint name -> (path, record kind). The name is the folder under raw/ and the key of the unknown-field report.
+ENDPOINTS: Dict[str, Tuple[str, str]] = {
+    "usage": ("/v1/usage", "usage"),
+# two-endpoints: begin
+    "totals": ("/v1/totals", "org_totals"),
+# two-endpoints: end
+}
+
+
+def batch_id_for(pulled_at: datetime) -> str:
+    return pulled_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def load_json(text: str) -> Any:
+    """The one way raw and API JSON is read. A number with a fraction becomes a ``Decimal``, never a float, so no digit is
+    lost. No rounding is added: the format's one decimal scale is ``meterline.MAX_DECIMALS`` and ``validate()`` refuses
+    more digits. A provider that sends more digits than that rounds once, at that scale, in the normaliser."""
+    return json.loads(text, parse_float=Decimal)
+
+
+class BadAnswer(ValueError):
+    """An answer that is JSON but not in the documented shape (a page cursor that is not a string or that came back).
+    The message names the problem and never holds a value of the answer."""
+
+
+def query_windows(first: date, last: date) -> List[Tuple[date, date]]:
+    """The queries that cover ``first`` to ``last``: ``WINDOW_DAYS`` days each, the last one possibly shorter."""
+    out: List[Tuple[date, date]] = []
+    start = first
+    while start <= last:
+        end = min(start + timedelta(days=WINDOW_DAYS - 1), last)
+        out.append((start, end))
+        start = end + timedelta(days=1)
+    return out
+
+
+def window_name(first: date, last: date) -> str:
+    """What the query asked for, as the contract names it: ``2026-09-15`` for a day, ``2026-09-01_2026-09-30`` for a range."""
+    return first.isoformat() if first == last else "%s_%s" % (first.isoformat(), last.isoformat())
+
+
+def fetch_window(client: Client, data_dir: Path, endpoint: str, first: date, last: date, batch_id: str,
+                 pulled_at: datetime) -> str:
+    """Fetch every page of ``endpoint`` for the days ``first`` to ``last`` and keep them in one new raw file; returns the
+    path under ``data_dir``. A raw file is never overwritten. A body that is not JSON raises ``ValueError`` and a cursor
+    the API has already given in this query raises ``BadAnswer``, both before anything is kept."""
+    path, _ = ENDPOINTS[endpoint]
+    params = {"date": first.isoformat()} if first == last else {"from": first.isoformat(), "to": last.isoformat()}
+    pages: List[Dict[str, Any]] = []
+    seen = set()
+    cursor = None
+    while True:
+        text = client.get(path, dict(params, **{PAGE_PARAM: cursor}) if cursor else params)
+        body = load_json(text)  # the body must be JSON before it is kept
+        pages.append({"status": 200, "body": text})
+        cursor = body.get(NEXT_PAGE_FIELD) if isinstance(body, dict) else None
+        if cursor is None:
+            break
+        if not isinstance(cursor, str):
+            raise BadAnswer("the page cursor is not a string")
+        if cursor in seen:
+            raise BadAnswer("the API repeated a page cursor")
+        seen.add(cursor)
+    window = window_name(first, last)
+    relative = "raw/%s/%s/%s.json.gz" % (endpoint, window, batch_id)
+    document = {"endpoint": endpoint, "window": window, "request_url": BASE_URL + path + "?" + urlencode(params),
+                "pulled_at": pulled_at.astimezone(timezone.utc).strftime(TS_FORMAT), "pages": pages}
+    target = Path(data_dir) / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "xb") as handle:  # "x": fail rather than replace a file that is there
+        handle.write(gzip.compress(json.dumps(document, sort_keys=True).encode("utf-8"), mtime=0))
+    return relative
+
+
+def endpoint_of(relative: str) -> str:
+    """The endpoint a raw file belongs to: ``raw/<endpoint>/<window>/<batch_id>.json.gz``."""
+    return relative.split("/")[1]
+
+
+def read_raw(data_dir: Path, relative: str) -> List[Any]:
+    """The answers of a raw file, one parsed body per page in the order they came. The file and each body are read with
+    ``load_json``, so no number with a fraction becomes a float."""
+    document = load_json(gzip.decompress((Path(data_dir) / relative).read_bytes()).decode("utf-8"))
+    return [load_json(page["body"]) for page in document["pages"]]
+
+
+@dataclass
+class RunManifest:
+    """Record of one run, written to ``runs/<batch_id>.json``; ``RunResult`` is built from it. ``provider_account_id`` is
+    the run option that ``rebuild`` needs; it is read back from here."""
+
+    command: str
+    batch_id: str
+    pulled_at: datetime
+    provider_account_id: str = ""
+    status: str = "published"  # "published" or "failed"
+    windows: List[str] = field(default_factory=list)
+    raw_files: List[str] = field(default_factory=list)
+    published_counts: Dict[str, int] = field(default_factory=dict)
+    failures: List[str] = field(default_factory=list)
+    unknown_fields: List[Dict[str, Any]] = field(default_factory=list)  # fields the provider sent that are not known
+
+    def write(self, data_dir: Path) -> Path:
+        body = {
+            "command": self.command, "batch_id": self.batch_id, "status": self.status,
+            "pulled_at": self.pulled_at.astimezone(timezone.utc).strftime(TS_FORMAT),
+            "provider_account_id": self.provider_account_id,
+            "windows": self.windows, "raw_files": self.raw_files, "published_counts": self.published_counts,
+            "failures": self.failures, "unknown_fields": self.unknown_fields,
+            "failure_kind": "none" if self.status == "published" else "input",  # a failed manifest is a failed check
+        }
+        path = Path(data_dir) / "runs" / (self.batch_id + ".json")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(body, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        os.replace(tmp, path)
+        return path
+
+    @classmethod
+    def read(cls, path: Path) -> "RunManifest":
+        body = json.loads(Path(path).read_text(encoding="utf-8"))
+        body.pop("failure_kind", None)
+        body["pulled_at"] = datetime.strptime(body["pulled_at"], TS_FORMAT).replace(tzinfo=timezone.utc)
+        return cls(**body)

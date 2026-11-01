@@ -1,0 +1,50 @@
+policy_format: 1
+name: fixture-policy
+label: "Invented values for the meterline-gold test fixture. Not any organisation's policy."
+currency: USD
+dimensions: [line]
+people:
+  attrs_keep: [location]
+privacy:
+  k: 5
+  tree: {kind: unit}
+  collapse: {}
+  compare_by: [function, level]
+bands:
+  metric: cost_ref
+  thresholds:
+    - {band: none, from: "0"}
+    - {band: light, from: "0.01"}
+    - {band: regular, from: "1.23"}
+    - {band: heavy, from: "12.34"}
+premium_tiers: [premium]
+seats:
+  idle_after_days: 14
+pools:
+  budgets:
+    - {provider: github_copilot, provider_account_id: "org:fixture-co", monthly_amount: "0.98"}
+alerts:
+  daily_breaker: "17.89"
+  spike: {multiplier: "5", floor: "12.34", trailing_days: 7, min_history_days: 5}
+audiences:
+  exec: {max_depth: 1}
+named_exceptions:
+  - {id: NX1, audience: central, condition: month_cost_ref_above, threshold: "23.45"}
+  - {id: NX2, audience: manager, condition: spike_events_at_least, threshold: "1"}
+scenarios:
+  - id: tiered_caps
+    label: "Caps by level"
+    person_caps:
+      default: "12.34"
+      by: level
+      values: {L1: "34.56", L4: "23.45"}
+    unit_envelopes: null
+    alert_fractions: ["0.5", "0.8", "1.0"]
+    top_up_amount: "4.56"
+  - id: unit_caps_plus_flat
+    label: "Unit envelopes plus a flat individual cap"
+    person_caps: {default: "29.87", by: null, values: {}}
+    unit_envelopes:
+      values: {alpha: "34.56", beta: "23.45"}
+    alert_fractions: ["0.5", "0.8", "1.0"]
+    top_up_amount: "4.56"

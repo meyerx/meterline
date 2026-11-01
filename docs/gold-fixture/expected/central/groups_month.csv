@@ -1,0 +1,5 @@
+schema_version,month,cell_id,cell_kind,cell_key,depth,parent_cell_id,suppressed,suppression_reason,persons,active_persons,active_days,cost_ref,p50_cost_ref,p75_cost_ref,p90_cost_ref,p99_cost_ref,top_decile_share,is_final
+2.0,2026-05,org:,org,,0,,false,,21,15,28,74.947,0.297,1.188,,,,false
+2.0,2026-05,unit:u01,unit,u01,1,org:,false,,21,15,28,74.947,0.297,1.188,,,,false
+2.0,2026-05,unit:u02,unit,u02,2,unit:u01,true,secondary,,,,,,,,,,
+2.0,2026-05,unit:u03,unit,u03,2,unit:u01,true,k,,,,,,,,,,

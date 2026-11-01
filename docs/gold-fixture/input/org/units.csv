@@ -1,0 +1,4 @@
+unit_id,valid_from,valid_to,dimension,key,name,kind,parent_id,function,cost_center,head_person_id
+u01,2026-05-01,,line,company,Company,company,,executive,CC-01,p01
+u02,2026-05-01,,line,alpha,Alpha,team,u01,sales,CC-02,p02
+u03,2026-05-01,,line,beta,Beta,team,u01,engineering,CC-03,p17

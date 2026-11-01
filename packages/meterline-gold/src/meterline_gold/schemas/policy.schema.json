@@ -1,0 +1,544 @@
+{
+  "$defs": {
+    "Alerts": {
+      "additionalProperties": false,
+      "properties": {
+        "daily_breaker": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Daily Breaker"
+        },
+        "spike": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Spike"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "Alerts",
+      "type": "object"
+    },
+    "Audiences": {
+      "additionalProperties": false,
+      "properties": {
+        "exec": {
+          "$ref": "#/$defs/ExecAudience",
+          "default": {
+            "max_depth": 1
+          }
+        }
+      },
+      "title": "Audiences",
+      "type": "object"
+    },
+    "Bands": {
+      "additionalProperties": false,
+      "properties": {
+        "metric": {
+          "default": "cost_ref",
+          "enum": [
+            "cost_ref",
+            "tokens"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "thresholds": {
+          "items": {
+            "$ref": "#/$defs/Threshold"
+          },
+          "minItems": 1,
+          "title": "Thresholds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "thresholds"
+      ],
+      "title": "Bands",
+      "type": "object"
+    },
+    "Budget": {
+      "additionalProperties": false,
+      "properties": {
+        "monthly_amount": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "Monthly Amount",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "provider_account_id": {
+          "title": "Provider Account Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "provider_account_id",
+        "monthly_amount"
+      ],
+      "title": "Budget",
+      "type": "object"
+    },
+    "ExecAudience": {
+      "additionalProperties": false,
+      "properties": {
+        "max_depth": {
+          "default": 1,
+          "minimum": 0,
+          "title": "Max Depth",
+          "type": "integer"
+        }
+      },
+      "title": "ExecAudience",
+      "type": "object"
+    },
+    "NamedException": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "enum": [
+            "central",
+            "manager"
+          ],
+          "title": "Audience",
+          "type": "string"
+        },
+        "condition": {
+          "enum": [
+            "month_cost_ref_above",
+            "breaker_events_at_least",
+            "spike_events_at_least"
+          ],
+          "title": "Condition",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "audience",
+        "condition",
+        "threshold"
+      ],
+      "title": "NamedException",
+      "type": "object"
+    },
+    "People": {
+      "additionalProperties": false,
+      "properties": {
+        "attrs_keep": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Attrs Keep",
+          "type": "array"
+        }
+      },
+      "title": "People",
+      "type": "object"
+    },
+    "PersonCaps": {
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "By"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        },
+        "values": {
+          "additionalProperties": {
+            "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+            "type": "string"
+          },
+          "default": {},
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "title": "PersonCaps",
+      "type": "object"
+    },
+    "Pools": {
+      "additionalProperties": false,
+      "properties": {
+        "budgets": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Budget"
+          },
+          "title": "Budgets",
+          "type": "array"
+        }
+      },
+      "title": "Pools",
+      "type": "object"
+    },
+    "Privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "collapse": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "default": {},
+          "title": "Collapse",
+          "type": "object"
+        },
+        "compare_by": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Compare By",
+          "type": "array"
+        },
+        "k": {
+          "minimum": 2,
+          "title": "K",
+          "type": "integer"
+        },
+        "tree": {
+          "$ref": "#/$defs/Tree"
+        }
+      },
+      "required": [
+        "k",
+        "tree",
+        "compare_by"
+      ],
+      "title": "Privacy",
+      "type": "object"
+    },
+    "Scenario": {
+      "additionalProperties": false,
+      "properties": {
+        "alert_fractions": {
+          "default": [],
+          "items": {
+            "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+            "type": "string"
+          },
+          "title": "Alert Fractions",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "person_caps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PersonCaps"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "top_up_amount": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Top Up Amount"
+        },
+        "unit_envelopes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitEnvelopes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "Scenario",
+      "type": "object"
+    },
+    "Seats": {
+      "additionalProperties": false,
+      "properties": {
+        "idle_after_days": {
+          "minimum": 1,
+          "title": "Idle After Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "idle_after_days"
+      ],
+      "title": "Seats",
+      "type": "object"
+    },
+    "Spike": {
+      "additionalProperties": false,
+      "properties": {
+        "floor": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "Floor",
+          "type": "string"
+        },
+        "min_history_days": {
+          "minimum": 1,
+          "title": "Min History Days",
+          "type": "integer"
+        },
+        "multiplier": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "Multiplier",
+          "type": "string"
+        },
+        "trailing_days": {
+          "minimum": 1,
+          "title": "Trailing Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "multiplier",
+        "floor",
+        "trailing_days",
+        "min_history_days"
+      ],
+      "title": "Spike",
+      "type": "object"
+    },
+    "Threshold": {
+      "additionalProperties": false,
+      "properties": {
+        "band": {
+          "title": "Band",
+          "type": "string"
+        },
+        "from": {
+          "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+          "title": "From",
+          "type": "string"
+        }
+      },
+      "required": [
+        "band",
+        "from"
+      ],
+      "title": "Threshold",
+      "type": "object"
+    },
+    "Tree": {
+      "additionalProperties": false,
+      "properties": {
+        "attributes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attributes"
+        },
+        "kind": {
+          "enum": [
+            "unit",
+            "attributes"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Tree",
+      "type": "object"
+    },
+    "UnitEnvelopes": {
+      "additionalProperties": false,
+      "properties": {
+        "values": {
+          "additionalProperties": {
+            "pattern": "^[0-9]+(\\.[0-9]{1,12})?$",
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "required": [
+        "values"
+      ],
+      "title": "UnitEnvelopes",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "alerts": {
+      "$ref": "#/$defs/Alerts",
+      "default": {
+        "daily_breaker": null,
+        "spike": null
+      }
+    },
+    "audiences": {
+      "$ref": "#/$defs/Audiences",
+      "default": {
+        "exec": {
+          "max_depth": 1
+        }
+      }
+    },
+    "bands": {
+      "$ref": "#/$defs/Bands"
+    },
+    "currency": {
+      "title": "Currency",
+      "type": "string"
+    },
+    "dimensions": {
+      "default": [
+        "line"
+      ],
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Dimensions",
+      "type": "array"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "named_exceptions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/NamedException"
+      },
+      "title": "Named Exceptions",
+      "type": "array"
+    },
+    "people": {
+      "$ref": "#/$defs/People",
+      "default": {
+        "attrs_keep": []
+      }
+    },
+    "policy_format": {
+      "const": 1,
+      "title": "Policy Format",
+      "type": "integer"
+    },
+    "pools": {
+      "$ref": "#/$defs/Pools",
+      "default": {
+        "budgets": []
+      }
+    },
+    "premium_tiers": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Premium Tiers",
+      "type": "array"
+    },
+    "privacy": {
+      "$ref": "#/$defs/Privacy"
+    },
+    "scenarios": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Scenario"
+      },
+      "title": "Scenarios",
+      "type": "array"
+    },
+    "seats": {
+      "$ref": "#/$defs/Seats"
+    }
+  },
+  "required": [
+    "policy_format",
+    "name",
+    "label",
+    "currency",
+    "privacy",
+    "bands",
+    "seats"
+  ],
+  "title": "Policy",
+  "type": "object"
+}

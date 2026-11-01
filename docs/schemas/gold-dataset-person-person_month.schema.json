@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of person/{person_key}/person_month.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8.",
+  "properties": {
+    "active_days": {
+      "description": "Days of the month with any usage or activity row.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "active_days_by_tool": {
+      "description": "JSON object of tool (provider or provider/product) to the person's active days with it.",
+      "pattern": "^\\{.*\\}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "map_count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "attribution_day": {
+      "description": "Last employed day of the month: the day whose organisation row attributes the person.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": false,
+      "x-unit": "date"
+    },
+    "cache_rate": {
+      "description": "Cache-read tokens divided by all input tokens, where both are known.",
+      "pattern": "^-?[0-9]+\\.[0-9]{4}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "ratio",
+      "x-hidden-covered": false,
+      "x-unit": "ratio"
+    },
+    "cost_center": {
+      "description": "Cost centre of the person or unit, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "cost_ref": {
+      "description": "Sum of the person's cost_ref over the month and all providers; 0.00 when nothing is priced.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "cost_ref_by_provider": {
+      "description": "JSON object of provider to the person's cost_ref at that provider.",
+      "pattern": "^\\{.*\\}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "map_money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "credits": {
+      "description": "AI credits consumed, for providers that meter in credits.",
+      "pattern": "^-?(0|[0-9]+(\\.[0-9]+)?)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "quantity",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "employed_days": {
+      "description": "Days of the month on which the person is employed.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "function": {
+      "description": "Function of the person or unit, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "intensity_band": {
+      "description": "Band of the person's month cost from the policy's bands.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "is_final": {
+      "description": "True when the provider will no longer revise the figure.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
+    "level": {
+      "description": "Level of the person, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "month": {
+      "description": "Calendar month, YYYY-MM.",
+      "pattern": "^[0-9]{4}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "month"
+    },
+    "month_status": {
+      "description": "complete for a finished month, running for the month in progress.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "person_key": {
+      "description": "Pseudonymous person key: a keyed hash of the person id, stable for one hashing key.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "population": {
+      "description": "Population label of the person, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "premium_share": {
+      "description": "Share of the person's cost_ref that went to premium-tier models.",
+      "pattern": "^-?[0-9]+\\.[0-9]{4}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "ratio",
+      "x-hidden-covered": false,
+      "x-unit": "ratio"
+    },
+    "projected_cost_ref": {
+      "description": "Month-end projection of cost_ref for a running month; empty when complete.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "requests": {
+      "description": "Sum of the person's requests in the month.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "rows_unknown_model": {
+      "description": "Number of the person's person_day rows whose model is not in the price list.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "rows_unpriced": {
+      "description": "Number of the person's person_day rows that could not be priced (cost_ref_status unpriced).",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "tokens_cache_read": {
+      "description": "Input tokens read from a cache.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "tokens"
+    },
+    "tokens_input_total": {
+      "description": "All input tokens: uncached, cache read and cache write.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "tokens"
+    },
+    "tokens_output": {
+      "description": "Output tokens.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "tokens"
+    },
+    "unit_id": {
+      "description": "Organisation unit id from the organisation files.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    }
+  },
+  "required": [
+    "schema_version",
+    "month",
+    "person_key",
+    "month_status",
+    "attribution_day",
+    "unit_id",
+    "function",
+    "level",
+    "cost_center",
+    "population",
+    "employed_days",
+    "active_days",
+    "active_days_by_tool",
+    "requests",
+    "tokens_input_total",
+    "tokens_output",
+    "tokens_cache_read",
+    "credits",
+    "cost_ref",
+    "cost_ref_by_provider",
+    "rows_unpriced",
+    "rows_unknown_model",
+    "premium_share",
+    "cache_rate",
+    "intensity_band",
+    "is_final",
+    "projected_cost_ref"
+  ],
+  "title": "gold-dataset-person-person_month",
+  "type": "object",
+  "x-audiences": [
+    "person"
+  ],
+  "x-columns": [
+    "schema_version",
+    "month",
+    "person_key",
+    "month_status",
+    "attribution_day",
+    "unit_id",
+    "function",
+    "level",
+    "cost_center",
+    "population",
+    "employed_days",
+    "active_days",
+    "active_days_by_tool",
+    "requests",
+    "tokens_input_total",
+    "tokens_output",
+    "tokens_cache_read",
+    "credits",
+    "cost_ref",
+    "cost_ref_by_provider",
+    "rows_unpriced",
+    "rows_unknown_model",
+    "premium_share",
+    "cache_rate",
+    "intensity_band",
+    "is_final",
+    "projected_cost_ref"
+  ],
+  "x-cost-column-rule": "`cost_ref` is the person's month total across providers; `cost_ref_by_provider` splits it. Seat fees are in no person's cost. `projected_cost_ref` projects a running month: do not add it to `cost_ref`.",
+  "x-dataset": "person_month",
+  "x-files": [
+    "person/{person_key}/person_month.csv"
+  ],
+  "x-grain": "One row per person with an employed day in the month.",
+  "x-joins": {
+    "person_key": [
+      "people.person_key"
+    ],
+    "unit_id": [
+      "units.unit_id"
+    ]
+  },
+  "x-primary-key": [
+    "month",
+    "person_key"
+  ]
+}

@@ -1,0 +1,26 @@
+price_list_format: 1
+as_of: "2026-10-01"
+source: "Invented example values; not any provider's price list or any organisation's contract."
+currency: USD
+models:
+  - {model: model-a-light, vendor: vendor-a, family: a, tier: light}
+  - {model: model-a-standard, vendor: vendor-a, family: a, tier: standard}
+  - {model: model-a-premium, vendor: vendor-a, family: a, tier: premium}
+  - {model: model-b-light, vendor: vendor-b, family: b, tier: light}
+  - {model: model-b-premium, vendor: vendor-b, family: b, tier: premium}
+  - {model: selfhosted-c-small, vendor: vendor-c, family: c, tier: light}
+token_prices:
+  - {provider: anthropic, model: model-a-light, valid_from: "2000-01-01", per_million: {input_uncached: "0.70", cache_read: "0.07", cache_write_5m: "0.90", cache_write_1h: "1.40", output: "3.50"}}
+  - {provider: anthropic, model: model-a-standard, valid_from: "2000-01-01", per_million: {input_uncached: "2.50", cache_read: "0.25", cache_write_5m: "3.10", cache_write_1h: "5.00", output: "12.50"}}
+  - {provider: anthropic, model: model-a-premium, valid_from: "2000-01-01", per_million: {input_uncached: "12.00", cache_read: "1.20", cache_write_5m: "15.00", cache_write_1h: "24.00", output: "60.00"}}
+  - {provider: litellm, model: model-a-standard, valid_from: "2000-01-01", per_million: {input_uncached: "2.60", cache_read: "0.26", cache_write_5m: "3.20", cache_write_1h: "3.20", output: "13.00"}}
+  - {provider: litellm, model: model-b-light, valid_from: "2000-01-01", per_million: {input_uncached: "0.22", cache_read: "0.06", cache_write_5m: "0.27", cache_write_1h: "0.27", output: "0.88"}}
+  - {provider: litellm, model: selfhosted-c-small, valid_from: "2000-01-01", per_million: {input_uncached: "0.00", cache_read: "0.00", cache_write_5m: "0.00", cache_write_1h: "0.00", output: "0.00"}}
+unit_prices:
+  - {provider: github_copilot, unit: ai_credit, valid_from: "2000-01-01", price: "0.01"}
+included:
+  - {provider: github_copilot, product: copilot_cli}
+  - {provider: github_copilot, product: copilot_app}
+seats:
+  - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "27.00", included_credits: null}
+  - {provider: github_copilot, provider_account_id: null, valid_from: "2000-01-01", per_month: "23.00", included_credits: "1500"}

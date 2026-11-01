@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of central/alert_events.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8.",
+  "properties": {
+    "day": {
+      "description": "Calendar day, YYYY-MM-DD (UTC).",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": false,
+      "x-unit": "date"
+    },
+    "event_type": {
+      "description": "breaker, spike or scenario_alert.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "scenario_id": {
+      "description": "Id of the shadow scenario from the policy.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "subject_key": {
+      "description": "person_key or unit_id, as subject_kind says.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "subject_kind": {
+      "description": "person or unit.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "threshold": {
+      "description": "Limit the event crossed, in the reference currency.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "trailing_days": {
+      "description": "Days in the spike's trailing window; empty on other events.",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "count",
+      "x-hidden-covered": false,
+      "x-unit": "count"
+    },
+    "trailing_sum": {
+      "description": "Sum of the day costs in the spike's trailing window; empty on other events.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    },
+    "value": {
+      "description": "Day cost or position that fired the event.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": false,
+      "x-unit": "currency"
+    }
+  },
+  "required": [
+    "schema_version",
+    "day",
+    "event_type",
+    "scenario_id",
+    "subject_kind",
+    "subject_key",
+    "value",
+    "threshold",
+    "trailing_sum",
+    "trailing_days"
+  ],
+  "title": "gold-dataset-alert_events",
+  "type": "object",
+  "x-audiences": [
+    "central"
+  ],
+  "x-columns": [
+    "schema_version",
+    "day",
+    "event_type",
+    "scenario_id",
+    "subject_kind",
+    "subject_key",
+    "value",
+    "threshold",
+    "trailing_sum",
+    "trailing_days"
+  ],
+  "x-cost-column-rule": "`value` and `threshold` are day or position costs; do not sum events.",
+  "x-dataset": "alert_events",
+  "x-files": [
+    "central/alert_events.csv"
+  ],
+  "x-grain": "One row per event; nothing is sent.",
+  "x-joins": {
+    "subject_key": [
+      "people.person_key",
+      "units.unit_id"
+    ]
+  },
+  "x-primary-key": [
+    "day",
+    "event_type",
+    "scenario_id",
+    "subject_kind",
+    "subject_key",
+    "threshold"
+  ]
+}

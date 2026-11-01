@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of central/units.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/write.py and meterline_gold/dataset_docs.py by meterline_gold.contract; do not edit by hand. Meaning of each column: docs/reference/gold-datasets.md and the gold spec, sections 6 to 8.",
+  "properties": {
+    "cost_center": {
+      "description": "Cost centre of the person or unit, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "dimension": {
+      "description": "Dimension of the unit tree the unit belongs to.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "function": {
+      "description": "Function of the unit, from the organisation files.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "head_key": {
+      "description": "person_key of the head of the unit.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "key": {
+      "description": "Short key of the unit within its dimension.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "kind": {
+      "description": "Kind of the unit, such as team or division.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "name": {
+      "description": "Display name of the unit.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "parent_id": {
+      "description": "unit_id of the parent unit; empty for a root.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "schema_version": {
+      "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
+      "enum": [
+        "2.0"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "unit_id": {
+      "description": "Organisation unit id from the organisation files.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "key"
+    },
+    "valid_from": {
+      "description": "First day the row is valid. A unit has one row per validity period: take the row valid on the day.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": false,
+      "x-unit": "date"
+    },
+    "valid_to": {
+      "description": "Last day the row is valid; empty if open. A join on unit_id alone repeats people: check both ends of the range.",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "date",
+      "x-hidden-covered": false,
+      "x-unit": "date"
+    }
+  },
+  "required": [
+    "schema_version",
+    "unit_id",
+    "valid_from",
+    "valid_to",
+    "dimension",
+    "key",
+    "name",
+    "kind",
+    "parent_id",
+    "function",
+    "cost_center",
+    "head_key"
+  ],
+  "title": "gold-dataset-units",
+  "type": "object",
+  "x-audiences": [
+    "central"
+  ],
+  "x-columns": [
+    "schema_version",
+    "unit_id",
+    "valid_from",
+    "valid_to",
+    "dimension",
+    "key",
+    "name",
+    "kind",
+    "parent_id",
+    "function",
+    "cost_center",
+    "head_key"
+  ],
+  "x-cost-column-rule": "No cost column.",
+  "x-dataset": "units",
+  "x-files": [
+    "central/units.csv"
+  ],
+  "x-grain": "One row per organisation unit and validity period.",
+  "x-joins": {
+    "head_key": [
+      "people.person_key"
+    ],
+    "parent_id": [
+      "units.unit_id"
+    ]
+  },
+  "x-primary-key": [
+    "unit_id",
+    "valid_from"
+  ]
+}

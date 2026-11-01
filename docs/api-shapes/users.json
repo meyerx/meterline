@@ -1,0 +1,108 @@
+{
+  "data": [
+    {
+      "user": {
+        "type": "user",
+        "id": "user-001",
+        "email_address": "alex.archer@example.com"
+      },
+      "chat_metrics": {
+        "distinct_conversation_count": 3,
+        "message_count": 14,
+        "distinct_artifacts_created_count": 1,
+        "distinct_skills_used_count": 1,
+        "distinct_connectors_used_count": 1
+      },
+      "claude_code_metrics": {
+        "core_metrics": {
+          "distinct_session_count": 2,
+          "commit_count": 3,
+          "pull_request_count": 1,
+          "artifacts_created_count": 0,
+          "lines_of_code": {
+            "added_count": 120,
+            "removed_count": 30
+          }
+        },
+        "tool_actions": {
+          "edit_tool": {
+            "accepted_count": 5,
+            "rejected_count": 1
+          },
+          "multi_edit_tool": {
+            "accepted_count": 5,
+            "rejected_count": 1
+          },
+          "notebook_edit_tool": {
+            "accepted_count": 5,
+            "rejected_count": 1
+          },
+          "write_tool": {
+            "accepted_count": 5,
+            "rejected_count": 1
+          }
+        }
+      },
+      "cowork_metrics": {
+        "distinct_session_count": 2,
+        "message_count": 9,
+        "artifacts_created_count": 1,
+        "distinct_skills_used_count": 1,
+        "distinct_connectors_used_count": 1
+      },
+      "design_metrics": {
+        "distinct_session_count": 1,
+        "message_count": 6
+      },
+      "office_metrics": {
+        "excel": {
+          "distinct_session_count": 1,
+          "message_count": 4,
+          "distinct_skills_used_count": 0,
+          "distinct_connectors_used_count": 0
+        },
+        "outlook": {
+          "distinct_session_count": 1,
+          "message_count": 4,
+          "distinct_skills_used_count": 0,
+          "distinct_connectors_used_count": 0
+        },
+        "powerpoint": {
+          "distinct_session_count": 1,
+          "message_count": 4,
+          "distinct_skills_used_count": 0,
+          "distinct_connectors_used_count": 0
+        },
+        "word": {
+          "distinct_session_count": 1,
+          "message_count": 4,
+          "distinct_skills_used_count": 0,
+          "distinct_connectors_used_count": 0
+        }
+      },
+      "science_metrics": {
+        "distinct_session_count": 1,
+        "message_count": 5
+      },
+      "chat_cowork_unified_metrics": {
+        "chat": {
+          "distinct_conversation_count": 3,
+          "message_count": 14,
+          "distinct_artifacts_created_count": 1,
+          "distinct_skills_used_count": 1,
+          "distinct_connectors_used_count": 1
+        },
+        "sessions": {
+          "distinct_session_count": 2,
+          "message_count": 9,
+          "artifacts_created_count": 1,
+          "distinct_skills_used_count": 1,
+          "distinct_connectors_used_count": 1
+        }
+      },
+      "web_search_count": 2,
+      "last_activity_date": "2026-09-15"
+    }
+  ],
+  "next_page": null
+}

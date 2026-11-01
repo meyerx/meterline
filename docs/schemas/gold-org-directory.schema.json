@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One data row of directory.csv, read as an object of column name to cell text; an empty cell is null. The header row must be exactly the columns of x-columns, in that order. Generated from meterline_gold/load.py by meterline_gold.contract; do not edit by hand. Meaning of each column: the gold spec, section 3.2.",
+  "properties": {
+    "email": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "family_name": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "given_name": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "person_id": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "person_id",
+    "given_name",
+    "family_name",
+    "email"
+  ],
+  "title": "directory.csv",
+  "type": "object",
+  "x-columns": [
+    "person_id",
+    "given_name",
+    "family_name",
+    "email"
+  ]
+}

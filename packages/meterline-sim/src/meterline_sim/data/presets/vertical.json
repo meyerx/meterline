@@ -1,0 +1,302 @@
+{
+  "preset_format": 1,
+  "name": "vertical",
+  "org": {
+    "name": "Example Vertical Co",
+    "slug": "example-vertical",
+    "email_domain": "example.com"
+  },
+  "dimensions": [
+    "line"
+  ],
+  "units": {
+    "key": "company",
+    "name": "Company",
+    "kind": "company",
+    "function": "executive",
+    "children": [
+      {
+        "key": "commercial",
+        "name": "Commercial",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "sales",
+            "name": "Sales",
+            "kind": "department",
+            "function": "sales",
+            "teams": 4,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "customer-service",
+            "name": "Customer Service",
+            "kind": "department",
+            "function": "service",
+            "teams": 4,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "marketing",
+            "name": "Marketing",
+            "kind": "department",
+            "function": "marketing",
+            "teams": 3,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      },
+      {
+        "key": "operations",
+        "name": "Operations",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "supply",
+            "name": "Supply",
+            "kind": "department",
+            "function": "operations",
+            "teams": 3,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "logistics",
+            "name": "Logistics",
+            "kind": "department",
+            "function": "operations",
+            "teams": 3,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "quality",
+            "name": "Quality",
+            "kind": "department",
+            "function": "operations",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      },
+      {
+        "key": "finance-legal",
+        "name": "Finance and Legal",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "accounting",
+            "name": "Accounting",
+            "kind": "department",
+            "function": "finance",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "controlling",
+            "name": "Controlling",
+            "kind": "department",
+            "function": "finance",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "legal",
+            "name": "Legal",
+            "kind": "department",
+            "function": "legal",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      },
+      {
+        "key": "people",
+        "name": "People",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "human-resources",
+            "name": "Human Resources",
+            "kind": "department",
+            "function": "hr",
+            "teams": 3,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "learning",
+            "name": "Learning",
+            "kind": "department",
+            "function": "hr",
+            "teams": 1,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      },
+      {
+        "key": "product",
+        "name": "Product",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "product-management",
+            "name": "Product Management",
+            "kind": "department",
+            "function": "product",
+            "teams": 3,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "design",
+            "name": "Design",
+            "kind": "department",
+            "function": "design",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      },
+      {
+        "key": "central-it",
+        "name": "Central IT",
+        "kind": "division",
+        "function": "executive",
+        "children": [
+          {
+            "key": "platform",
+            "name": "Platform",
+            "kind": "department",
+            "function": "engineering",
+            "teams": 3,
+            "team_size": [
+              5,
+              5
+            ]
+          },
+          {
+            "key": "applications",
+            "name": "Applications",
+            "kind": "department",
+            "function": "engineering",
+            "teams": 3,
+            "team_size": [
+              5,
+              5
+            ]
+          },
+          {
+            "key": "data",
+            "name": "Data",
+            "kind": "department",
+            "function": "engineering",
+            "teams": 2,
+            "team_size": [
+              4,
+              4
+            ]
+          },
+          {
+            "key": "workplace",
+            "name": "Workplace",
+            "kind": "department",
+            "function": "it_ops",
+            "teams": 2,
+            "team_size": [
+              7,
+              11
+            ]
+          },
+          {
+            "key": "security",
+            "name": "Security",
+            "kind": "department",
+            "function": "security",
+            "teams": 1,
+            "team_size": [
+              7,
+              11
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "matrix_units": [],
+  "profiles": {
+    "shares": {
+      "dormant": "0.30",
+      "curious": "0.30",
+      "office_worker": "0.30",
+      "developer": "0.08",
+      "power_user": "0.02"
+    }
+  },
+  "developer_functions": [
+    "engineering"
+  ],
+  "parameters": {
+    "providers": {
+      "github_copilot": {
+        "granted_units": [
+          "platform",
+          "applications",
+          "data"
+        ]
+      },
+      "litellm": {
+        "accounts": [
+          "sa01",
+          "sa02",
+          "sa03"
+        ]
+      }
+    },
+    "events": {
+      "reorganisation": {
+        "unit": "customer-service"
+      }
+    }
+  }
+}

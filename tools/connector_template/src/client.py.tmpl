@@ -1,0 +1,64 @@
+"""HTTP client of the @@TITLE@@ API: the key goes in the ``Authorization`` header and nowhere else; requests are throttled
+and 429 and 5xx are retried, all through ``meterline.http`` and the injected clocks."""
+
+import logging
+import random
+import time
+from typing import Any, Callable, Dict, Optional
+
+import httpx
+from meterline import http
+
+logger = logging.getLogger("@@PKG@@.client")
+
+BASE_URL = "https://api.@@NAME@@.example.com"
+WINDOW_SECONDS = 60  # the rate is per minute
+MAX_TRIES = 6
+
+
+class ApiError(Exception):
+    """A request that failed for good: ``status`` is the HTTP status, 0 for a transport failure."""
+
+    def __init__(self, status: int, message: Optional[str] = None) -> None:
+        self.status = status
+        super().__init__(message or "HTTP %d" % status)
+
+
+class Client:
+    def __init__(self, key: str, *, transport: Optional[httpx.BaseTransport] = None, rate_per_minute: int = 60,
+                 clock: Callable[[], Any] = time.monotonic, sleep: Callable[[Any], Any] = time.sleep,
+                 jitter: Callable[[], Any] = random.random, wall: Callable[[], Any] = time.time,
+                 max_retry_after: int = http.MAX_RETRY_AFTER_SECONDS) -> None:
+        self._key = key
+        self._throttle = http.Throttle(rate_per_minute, WINDOW_SECONDS, clock=clock, sleep=sleep).wait
+        self._sleep, self._jitter, self._wall, self._cap = sleep, jitter, wall, max_retry_after
+        self._http = httpx.Client(transport=transport, base_url=BASE_URL, headers={"Authorization": "Bearer " + key}, timeout=60)
+
+    def __enter__(self) -> "Client":
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self._http.close()
+
+    def get(self, path: str, params: Dict[str, Any]) -> str:
+        """The body of a 200 answer as text, exactly as received; raises ``ApiError``. The client does not parse it:
+        ``fetch.load_json`` does, so a number is read in one way only."""
+        last = 0
+        for attempt in range(MAX_TRIES):
+            self._throttle()
+            wait: Optional[int] = None
+            try:
+                response = self._http.get(path, params=params)
+            except httpx.TransportError as exc:
+                last = 0
+                logger.warning("transport error %s (attempt %d)", type(exc).__name__, attempt + 1)
+            else:
+                if response.status_code == 200:
+                    return response.text
+                if not http.is_retryable(response.status_code):
+                    raise ApiError(response.status_code, http.mask("HTTP %d" % response.status_code, [self._key]))
+                last = response.status_code
+                wait = http.retry_after_seconds(response.headers.get("retry-after"), wall=self._wall, cap=self._cap)
+            if attempt + 1 < MAX_TRIES:
+                self._sleep(http.retry_wait(http.backoff_seconds(attempt, self._jitter), wait))
+        raise ApiError(last, "giving up after %d tries (last status %d)" % (MAX_TRIES, last))

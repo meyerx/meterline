@@ -1,0 +1,14 @@
+"""@@DIST@@: reads the @@TITLE@@ usage API and emits meterline records."""
+
+from importlib.metadata import PackageNotFoundError as _NotInstalled, version as _version
+
+from meterline import RunResult
+
+from .cli import run
+
+try:
+    __version__ = _version("@@DIST@@")  # the one source is pyproject.toml
+except _NotInstalled:  # a source tree that is not installed
+    __version__ = "0+unknown"
+
+__all__ = ["RunResult", "run", "__version__"]

@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "actor": {
+        "type": "user_actor",
+        "user_id": "user-001",
+        "email_address": "alex.archer@example.com",
+        "name": "Alex Archer",
+        "deleted": false
+      },
+      "starting_at": "2026-09-15T00:00:00Z",
+      "ending_at": "2026-09-16T00:00:00Z",
+      "model": "model-a-large",
+      "product": "claude_code",
+      "amount": "412.800000",
+      "list_amount": "458.666667",
+      "currency": "USD",
+      "requests": 12
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "data_refreshed_at": "2026-10-09T12:00:00Z",
+  "organization_id": "org-synthetic-0001"
+}

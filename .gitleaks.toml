@@ -1,0 +1,15 @@
+# gitleaks configuration. Both the CI secret scan and the scan of the exported public tree read this file from the
+# repository root. A finding is allowed only by naming its rule and its file, never by a commit hash, so the entry
+# holds in a repository with a different history.
+title = "meterline"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The key-check value of the gold fixture: an HMAC of a fixed phrase under the public test key \"meterline-gold-fixture-key-not-a-secret\" (gold-core spec appendix A.1). Not a secret."
+targetRules = ["generic-api-key"]
+paths = [
+    '''packages/meterline-gold/tests/test_done_check_G12_G14_privacy_order_manifest\.py''',
+    '''docs/dev/(history/)?meterline-gold-core-SPEC-v1\.[0-9]-[0-9-]+\.md''',
+]

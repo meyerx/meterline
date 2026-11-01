@@ -1,0 +1,363 @@
+{
+  "behaviour": {
+    "profiles": {
+      "dormant": {
+        "p_active": "0.01",
+        "weekend_factor": "0.05",
+        "products": {
+          "chat": "1.0"
+        }
+      },
+      "curious": {
+        "p_active": "0.30",
+        "weekend_factor": "0.05",
+        "products": {
+          "chat": "1.0"
+        }
+      },
+      "office_worker": {
+        "p_active": "0.80",
+        "weekend_factor": "0.05",
+        "products": {
+          "chat": "0.9",
+          "cowork": "0.5",
+          "office_agent": "0.4"
+        }
+      },
+      "developer": {
+        "p_active": "0.92",
+        "weekend_factor": "0.10",
+        "products": {
+          "chat": "0.5",
+          "claude_code": "0.85",
+          "copilot": "0.9"
+        }
+      },
+      "power_user": {
+        "p_active": "0.97",
+        "weekend_factor": "0.20",
+        "products": {
+          "chat": "0.9",
+          "cowork": "0.6",
+          "claude_code": "0.8",
+          "copilot": "0.9"
+        }
+      }
+    },
+    "volume": {
+      "dormant": {
+        "chat": {
+          "req_median": "2",
+          "req_sigma": "0.5",
+          "model_weights": {
+            "model-a-light": "0.3",
+            "model-a-standard": "0.7",
+            "model-a-premium": "0"
+          }
+        }
+      },
+      "curious": {
+        "chat": {
+          "req_median": "6",
+          "req_sigma": "0.6",
+          "model_weights": {
+            "model-a-light": "0.2",
+            "model-a-standard": "0.75",
+            "model-a-premium": "0.05"
+          }
+        }
+      },
+      "office_worker": {
+        "chat": {
+          "req_median": "15",
+          "req_sigma": "0.6",
+          "model_weights": {
+            "model-a-light": "0.15",
+            "model-a-standard": "0.75",
+            "model-a-premium": "0.10"
+          }
+        },
+        "cowork": {
+          "req_median": "8",
+          "req_sigma": "0.6",
+          "model_weights": {
+            "model-a-light": "0",
+            "model-a-standard": "0.85",
+            "model-a-premium": "0.15"
+          }
+        },
+        "office_agent": {
+          "req_median": "5",
+          "req_sigma": "0.6",
+          "model_weights": {
+            "model-a-light": "0.2",
+            "model-a-standard": "0.8",
+            "model-a-premium": "0"
+          }
+        }
+      },
+      "developer": {
+        "chat": {
+          "req_median": "10",
+          "req_sigma": "0.6",
+          "model_weights": {
+            "model-a-light": "0.1",
+            "model-a-standard": "0.8",
+            "model-a-premium": "0.1"
+          }
+        },
+        "claude_code": {
+          "req_median": "120",
+          "req_sigma": "0.7",
+          "model_weights": {
+            "model-a-light": "0",
+            "model-a-standard": "0.8",
+            "model-a-premium": "0.2"
+          }
+        }
+      },
+      "power_user": {
+        "chat": {
+          "req_median": "40",
+          "req_sigma": "1.0",
+          "model_weights": {
+            "model-a-light": "0",
+            "model-a-standard": "0.3",
+            "model-a-premium": "0.7"
+          }
+        },
+        "cowork": {
+          "req_median": "25",
+          "req_sigma": "1.0",
+          "model_weights": {
+            "model-a-light": "0",
+            "model-a-standard": "0.3",
+            "model-a-premium": "0.7"
+          }
+        },
+        "claude_code": {
+          "req_median": "400",
+          "req_sigma": "1.0",
+          "model_weights": {
+            "model-a-light": "0",
+            "model-a-standard": "0.3",
+            "model-a-premium": "0.7"
+          }
+        }
+      }
+    },
+    "tokens": {
+      "chat": {
+        "in_median": "3000",
+        "in_sigma": "0.4",
+        "out_median": "500",
+        "out_sigma": "0.5",
+        "f_read": "0.40",
+        "f_write": "0.10",
+        "f_1h": "0.00",
+        "web_rate": "0.05"
+      },
+      "cowork": {
+        "in_median": "12000",
+        "in_sigma": "0.4",
+        "out_median": "1500",
+        "out_sigma": "0.5",
+        "f_read": "0.60",
+        "f_write": "0.10",
+        "f_1h": "0.20",
+        "web_rate": "0"
+      },
+      "office_agent": {
+        "in_median": "4000",
+        "in_sigma": "0.4",
+        "out_median": "600",
+        "out_sigma": "0.5",
+        "f_read": "0.30",
+        "f_write": "0.10",
+        "f_1h": "0.00",
+        "web_rate": "0"
+      },
+      "claude_code": {
+        "in_median": "25000",
+        "in_sigma": "0.4",
+        "out_median": "900",
+        "out_sigma": "0.5",
+        "f_read": "0.85",
+        "f_write": "0.05",
+        "f_1h": "0.30",
+        "web_rate": "0"
+      }
+    },
+    "copilot": {
+      "developer": {
+        "shown_median": "80",
+        "ask_median": "4",
+        "agent_median": "3",
+        "cli_median": "6",
+        "app_median": "3",
+        "model_weights": {
+          "model-b-light": "0.3",
+          "model-a-standard": "0.5",
+          "model-b-premium": "0.2"
+        }
+      },
+      "power_user": {
+        "shown_median": "240",
+        "ask_median": "12",
+        "agent_median": "9",
+        "cli_median": "18",
+        "app_median": "9",
+        "model_weights": {
+          "model-b-light": "0.1",
+          "model-a-standard": "0.4",
+          "model-b-premium": "0.5"
+        }
+      }
+    },
+    "drift": {
+      "dormant": {},
+      "curious": {
+        "office_worker": "0.04",
+        "developer": "0.01",
+        "dormant": "0.02"
+      },
+      "office_worker": {
+        "dormant": "0.01"
+      },
+      "developer": {
+        "dormant": "0.005"
+      },
+      "power_user": {}
+    },
+    "service_accounts": {
+      "sa01": {
+        "model": "model-a-standard",
+        "req_median": "400",
+        "req_sigma": "0.3",
+        "in_median": "2000",
+        "out_median": "300",
+        "f_read": "0.30",
+        "f_write": "0.05",
+        "failure_rate": "0.01"
+      },
+      "sa02": {
+        "model": "model-b-light",
+        "req_median": "900",
+        "req_sigma": "0.3",
+        "in_median": "6000",
+        "out_median": "400",
+        "f_read": "0.10",
+        "f_write": "0.00",
+        "failure_rate": "0.01"
+      },
+      "sa03": {
+        "model": "selfhosted-c-small",
+        "req_median": "2000",
+        "req_sigma": "0.2",
+        "in_median": "1500",
+        "out_median": "200",
+        "f_read": "0.00",
+        "f_write": "0.00",
+        "failure_rate": "0.01"
+      }
+    }
+  },
+  "providers": {
+    "anthropic": {
+      "enabled": true,
+      "active_windows": [
+        7,
+        30
+      ]
+    },
+    "github_copilot": {
+      "enabled": true,
+      "plan": "business",
+      "granted_units": [],
+      "included_credits_per_seat": null,
+      "seat_age_days": [
+        30,
+        365
+      ],
+      "active_windows": [
+        7,
+        28
+      ]
+    },
+    "litellm": {
+      "enabled": true,
+      "proxy_name": "example-proxy",
+      "accounts": [],
+      "unpriced_cost": "zero"
+    }
+  },
+  "calendar": {
+    "holidays": [
+      {
+        "name": "year-end break",
+        "from": "12-24",
+        "to": "01-01",
+        "factor": "0.2"
+      },
+      {
+        "name": "summer dip",
+        "from": "07-15",
+        "to": "08-15",
+        "factor": "0.7"
+      }
+    ]
+  },
+  "events": {
+    "joiners_leavers": {
+      "enabled": true,
+      "leaver_rate": "0.015",
+      "joiner_rate": "0.015",
+      "invite_lead_days": 3,
+      "min_per_period": 0
+    },
+    "reorganisation": {
+      "enabled": true,
+      "unit": null,
+      "month_index": null
+    },
+    "runaway_agent": {
+      "enabled": true,
+      "multiplier": 20,
+      "days": 2,
+      "model": "model-a-standard",
+      "start": null
+    },
+    "late_correction": {
+      "enabled": true,
+      "window_end_offset_days": 7,
+      "window_days": 3,
+      "share": "0.25",
+      "factor": "1.10",
+      "after_days": 5
+    },
+    "price_change": {
+      "enabled": true,
+      "provider": "anthropic",
+      "model": "model-a-standard",
+      "factor": "0.8",
+      "date": null
+    }
+  },
+  "pull": {
+    "lag_days": 3
+  },
+  "contractor_share": "0.05",
+  "locations": {
+    "values": [
+      "site-a",
+      "site-b",
+      "site-c"
+    ],
+    "weights": [
+      "0.5",
+      "0.3",
+      "0.2"
+    ]
+  },
+  "price_table": null
+}

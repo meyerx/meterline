@@ -1,0 +1,54 @@
+{
+  "batch_id": "20261009T180000Z",
+  "command": "daily",
+  "cost_only": [],
+  "failures": [],
+  "pages": 4,
+  "published_counts": {
+    "activity": 0,
+    "org_totals": 0,
+    "seats": 0,
+    "usage": 1
+  },
+  "pulled_at": "2026-10-09T18:00:00Z",
+  "raw_files": [
+    "raw/user_usage_report/2026-10-01_2026-10-09/20261009T180000Z.json.gz",
+    "raw/user_cost_report/2026-10-01_2026-10-09/20261009T180000Z.json.gz",
+    "raw/usage_report/2026-10-01_2026-10-09/20261009T180000Z.json.gz",
+    "raw/cost_report/2026-10-01_2026-10-09/20261009T180000Z.json.gz"
+  ],
+  "row_counts": {
+    "cost_report": 8,
+    "usage_report": 8,
+    "user_cost_report": 490,
+    "user_usage_report": 490
+  },
+  "skipped_windows": [],
+  "status": "published",
+  "totals": {
+    "org_totals.cost": "2758.27156005",
+    "org_totals.cost_list": "2861.26660409",
+    "org_totals.requests": "93950",
+    "org_totals.tokens_cache_read": "522023061",
+    "org_totals.tokens_cache_write_1h": "2250413",
+    "org_totals.tokens_cache_write_5m": "49103175",
+    "org_totals.tokens_input": "121596539",
+    "org_totals.tokens_output": "33650279",
+    "org_totals.web_search_requests": "1216",
+    "usage.cost": "2236.48771785",
+    "usage.cost_list": "2338.48276189",
+    "usage.requests": "73905",
+    "usage.tokens_cache_read": "480548157",
+    "usage.tokens_cache_write_1h": "2250413",
+    "usage.tokens_cache_write_5m": "49103175",
+    "usage.tokens_input": "95058441",
+    "usage.tokens_output": "24344990",
+    "usage.web_search_requests": "1216"
+  },
+  "unknown_models": [],
+  "unknown_products": [],
+  "windows": [
+    "usage:2026-10-01_2026-10-09",
+    "org:2026-10-01_2026-10-09"
+  ]
+}

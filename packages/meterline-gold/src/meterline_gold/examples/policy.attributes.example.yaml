@@ -1,0 +1,41 @@
+policy_format: 1
+name: example-attributes-policy
+label: "Invented example policy for meterline-gold: a flat organisation grouped by attributes, without a unit tree. Every value is made up for illustration; it is not any organisation's policy."
+currency: USD
+dimensions: [line]
+people:
+  attrs_keep: [location]
+privacy:
+  k: 5
+  tree: {kind: attributes, attributes: [population, function, attrs.location]}
+  collapse:
+    level: {L1: L1-L3, L2: L1-L3, L3: L1-L3}
+  compare_by: [level, population]
+bands:
+  metric: tokens
+  thresholds:
+    - {band: none, from: "0"}
+    - {band: light, from: "100000"}
+    - {band: regular, from: "2500000"}
+    - {band: heavy, from: "25000000"}
+premium_tiers: [premium]
+seats:
+  idle_after_days: 30
+alerts:
+  daily_breaker: "76.54"
+  spike: {multiplier: "4", floor: "32.19", trailing_days: 10, min_history_days: 5}
+audiences:
+  exec: {max_depth: 1}
+named_exceptions:
+  - {id: breaker-days, audience: manager, condition: breaker_events_at_least, threshold: "2"}
+  - {id: high-month, audience: central, condition: month_cost_ref_above, threshold: "654.32"}
+scenarios:
+  - id: caps_by_population
+    label: "Monthly caps by population, one default for everyone else"
+    person_caps:
+      default: "98.76"
+      by: population
+      values: {contractor: "43.21", employee: "187.65"}
+    unit_envelopes: null
+    alert_fractions: ["0.8", "1.0"]
+    top_up_amount: "21.43"

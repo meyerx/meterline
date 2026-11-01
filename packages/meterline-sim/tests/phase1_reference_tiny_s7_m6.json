@@ -1,0 +1,21 @@
+{
+  "files": {
+    "ground_truth.json": "3410d3551162d6b703894f7c7d8fac0ca743c0cae74ad77e759e7fac74e129a5",
+    "org/directory.csv": "446827aa7858f04547f20a7002ddccae316a06d99144fa074c4470a74936b168",
+    "org/identities.csv": "c2684f1efa2c1c725c4db93d47f57e1fbfc25347401e2efd6c72a9075013dfa6",
+    "org/memberships.csv": "096ce55e2ffeac417890d967a1f1ea9f41ab9768311db678e3cd02ee54265edb",
+    "org/people.csv": "a137db4d251135b5b3f4a96f0af07f5d5b65a25b798efca734c2e39e715ea0e0",
+    "org/units.csv": "8a13968b6d0b8b903a3dc9c9da3b0839102a7c7ccf122cfbf36915d9abb982da",
+    "records/activity/20261003T060000Z.jsonl": "81e8cc408c277294db9fd67c412baa781eb1642830dbe8e13a652eae5660575c",
+    "records/org_totals/20261003T060000Z.jsonl": "95874349b4908a7c5d34187bf2083b811a19c934139261c14c728589c54e7cb4",
+    "records/org_totals/20261003T062000Z.jsonl": "ac70b50b7108c35b173e2d1ce6167e9e3f44274b4f299de92d65c788f9f04a4a",
+    "records/seats/20261003T060000Z.jsonl": "b85376044388b632fd18a69af60c887e60a01a6f0d386828c307457701c97277",
+    "records/usage/20261003T060000Z.jsonl": "4c7fc46f818e49acdd3d015a314e06f86f12872f8ba07922cf2a01ab68ca1344",
+    "records/usage/20261003T062000Z.jsonl": "95ac9974556dd029e5be6f2ce2b8cea298f0be6b7be848f51c0faea3932bffbf"
+  },
+  "manifest_sha256": "caa37991ef8e3435bde4b31645f2d8a047b79f6706bbf798c63f58e8a75d3e03",
+  "months": 6,
+  "note": "sha256 of every file written by the phase 1 build (main 2f2617b) for the tiny preset, seed 7, 6 months, with providers.github_copilot.enabled false. A test of S03 compares phase 2 runs against it. ground_truth.json and manifest.json were re-recorded when meterline-sim went from 1.0.0 to 0.1.0 (change-list-meterline-prepub-b2.md B2-c): they differ from the phase 1 bytes only by that version string and, in the manifest, the ground truth hash. The hashes of the five record kinds and of manifest_sha256 were re-recorded for the rename of org_id to provider_account_id (change-list-meterline-prepub-b4.md MF-13): the new bytes, with provider_account_id mapped back to org_id (keys kept in sorted order), hash to the values recorded before, and so does the manifest with the embedded hashes and sizes of those files mapped back.",
+  "preset": "tiny",
+  "seed": 7
+}

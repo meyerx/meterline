@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meterline-sim"
+version = "0.1.0"
+description = "Generates an invented organisation and its AI usage as meterline silver records plus a ground truth."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [{ name = "Xavier Meyer" }]
+keywords = ["ai", "llm", "usage", "synthetic-data", "simulation", "testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+]
+requires-python = ">=3.10"
+dependencies = ["meterline>=0.2"]
+
+[project.urls]
+Homepage = "https://github.com/meyerx/meterline"
+Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline-sim"
+Issues = "https://github.com/meyerx/meterline/issues"
+Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "hypothesis>=6.100", "pytest-xdist==3.8.0", "ruff==0.17.3"]
+[project.scripts]
+meterline-sim = "meterline_sim.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+meterline_sim = ["data/*.json", "data/presets/*.json"]

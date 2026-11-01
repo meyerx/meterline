@@ -1,0 +1,167 @@
+"""A fake @@TITLE@@ API for testing code that calls ``@@PKG@@.run``, with no key and no network.
+
+# one-endpoint: begin
+``FakeAPI`` answers ``GET /v1/usage?date=YYYY-MM-DD`` on an ``httpx.MockTransport``.
+# one-endpoint: end
+# two-endpoints: begin
+``FakeAPI`` answers ``GET /v1/usage?date=YYYY-MM-DD`` and ``GET /v1/totals?date=YYYY-MM-DD`` on an ``httpx.MockTransport``.
+# two-endpoints: end
+Everything it serves is invented: four users at ``example.com`` addresses and two models for 2026-09-01 to 2026-09-14,
+built in code. A cost is served as a JSON number, as a provider may send it. It scripts faults (``fail``), logs every
+request with the injected clock's time (``log``) and answers 401 to any other key.
+
+It pages as a provider does. An answer holds at most ``page_size`` rows (``PAGE_SIZE``, 3 by default, so the 8 rows of
+one sample day take three requests) and a cursor, ``next_page``, that is null on the last page. The client sends the
+cursor back as the ``page`` parameter. ``repeat_page()`` scripts the API to answer a later page with the cursor it was
+just given, which a client must refuse. Replace the names ``page`` and ``next_page`` and the page size with the
+provider's own.
+
+    from datetime import date
+    from @@PKG@@ import run
+    from @@PKG@@.testing import FakeAPI
+
+    fake = FakeAPI()
+    result = run("backfill", since=date(2026, 9, 1), data_dir="out", credentials={"@@ENV@@": fake.api_key},
+                 transport=fake.transport)
+
+What it does not prove: that a live API accepts your key, answers in this shape or rate-limits like this.
+"""
+
+import json
+import time
+from dataclasses import dataclass
+from datetime import date, timedelta
+from decimal import Decimal
+from typing import Any, Callable, Dict, List, Optional
+
+import httpx
+
+PATH_USAGE = "/v1/usage"
+# two-endpoints: begin
+PATH_TOTALS = "/v1/totals"
+# two-endpoints: end
+CURSOR_PREFIX = "after-"
+SAMPLE_KEY = "synthetic-@@NAME@@-key-not-real"
+SAMPLE_USERS = ("ada@example.com", "ben@example.com", "cai@example.com", "dee@example.com")
+SAMPLE_MODELS = ("model-a", "model-b")
+FIRST_DAY, LAST_DAY = date(2026, 9, 1), date(2026, 9, 14)
+PAGE_SIZE = 3  # rows per answer; small, so that the sample data of one day spans more than one page
+
+
+@dataclass
+class LogEntry:
+    time: Any  # the injected clock's reading
+    path: str
+    params: Dict[str, str]
+    status: int
+
+
+@dataclass
+class _Fault:
+    path: str
+    status: int
+    times: int
+    retry_after: Optional[int]
+
+
+def sample_dataset() -> Dict[str, List[Dict[str, Any]]]:
+    """Day (ISO) to its rows; built in code, the same on every call. A cost is a ``Decimal``, served as a JSON number."""
+    days: Dict[str, List[Dict[str, Any]]] = {}
+    day = FIRST_DAY
+    while day <= LAST_DAY:
+        n = (day - FIRST_DAY).days
+        days[day.isoformat()] = [
+            {"user": user, "model": model, "input_tokens": 1000 + 10 * n + i, "output_tokens": 100 + n,
+             "cost": Decimal("%d.%02d" % (n % 3, 5 * (i + 1)))}
+            for i, user in enumerate(SAMPLE_USERS) for model in SAMPLE_MODELS
+        ]
+        day += timedelta(days=1)
+    return days
+
+
+class FakeAPI:
+    def __init__(self, days: Optional[Dict[str, List[Dict[str, Any]]]] = None, *, api_key: str = SAMPLE_KEY,
+                 clock: Callable[[], Any] = time.monotonic, page_size: int = PAGE_SIZE) -> None:
+        self.days = sample_dataset() if days is None else days
+        self.api_key = api_key
+        self.clock = clock
+        self.page_size = page_size
+        self._repeat = False
+        self.log: List[LogEntry] = []
+        self._faults: List[_Fault] = []
+        self.transport = httpx.MockTransport(self._handle)
+
+    def fail(self, path: str, status: int, *, times: int = 1, retry_after: Optional[int] = None) -> None:
+        """Answer ``status`` to the next ``times`` requests for ``path`` (``""`` matches every path)."""
+        self._faults.append(_Fault(path, status, times, retry_after))
+
+    def repeat_page(self) -> None:
+        """From now on, answer a request that carries a ``page`` cursor with that same cursor as ``next_page``."""
+        self._repeat = True
+
+    def requests_for(self, path: str) -> List[LogEntry]:
+        return [e for e in self.log if e.path == path]
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+
+        def reply(status: int, body: Any, headers: Optional[Dict[str, str]] = None) -> httpx.Response:
+            self.log.append(LogEntry(self.clock(), request.url.path, params, status))
+            return httpx.Response(status, content=_dumps(body), headers={"content-type": "application/json", **(headers or {})})
+
+        for fault in self._faults:
+            if fault.times > 0 and request.url.path.endswith(fault.path):
+                fault.times -= 1
+                headers = {"retry-after": str(fault.retry_after)} if fault.retry_after is not None else None
+                return reply(fault.status, {"error": "scripted fault"}, headers)
+        if request.headers.get("authorization") != "Bearer " + self.api_key:
+            return reply(401, {"error": "invalid key"})
+        paths = [PATH_USAGE]
+# two-endpoints: begin
+        paths.append(PATH_TOTALS)
+# two-endpoints: end
+        if request.url.path not in paths:
+            return reply(404, {"error": "no such path"})
+        try:
+            day = date.fromisoformat(params.get("date", ""))
+        except ValueError:
+            return reply(400, {"error": "date must be YYYY-MM-DD"})
+        rows = self.days.get(day.isoformat(), [])
+# two-endpoints: begin
+        if request.url.path == PATH_TOTALS:
+            rows = _totals(rows)
+# two-endpoints: end
+        start = 0
+        if "page" in params:  # the cursor is the index of the first row of the page, as an opaque-looking string
+            if not params["page"].startswith(CURSOR_PREFIX) or not params["page"][len(CURSOR_PREFIX):].isdigit():
+                return reply(400, {"error": "unknown page cursor"})
+            start = int(params["page"][len(CURSOR_PREFIX):])
+        end = start + self.page_size
+        following = CURSOR_PREFIX + str(end) if end < len(rows) else None
+        if self._repeat and "page" in params:
+            following = params["page"]
+        return reply(200, {"date": day.isoformat(), "data": rows[start:end], "next_page": following})
+# two-endpoints: begin
+
+
+def _totals(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """The organisation's totals of a day: the rows added up per model."""
+    out: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        total = out.setdefault(row["model"], {"model": row["model"], "input_tokens": 0, "output_tokens": 0, "cost": Decimal(0)})
+        total["input_tokens"] += row["input_tokens"]
+        total["output_tokens"] += row["output_tokens"]
+        total["cost"] += Decimal(row["cost"])
+    return [out[model] for model in sorted(out)]
+# two-endpoints: end
+
+
+def _dumps(value: Any) -> str:
+    """JSON text of a body; a Decimal is written as the number it holds, so no figure passes through a binary float."""
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if isinstance(value, dict):
+        return "{" + ", ".join("%s: %s" % (json.dumps(k), _dumps(v)) for k, v in value.items()) + "}"
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_dumps(v) for v in value) + "]"
+    return json.dumps(value)

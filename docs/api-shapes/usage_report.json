@@ -1,0 +1,27 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-09-15T00:00:00Z",
+      "ending_at": "2026-09-16T00:00:00Z",
+      "results": [
+        {
+          "uncached_input_tokens": 120000,
+          "output_tokens": 34000,
+          "cache_read_input_tokens": 500000,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 80000,
+            "ephemeral_1h_input_tokens": 20000
+          },
+          "requests": 1200,
+          "server_tool_use": {
+            "web_search_requests": 10
+          }
+        }
+      ]
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "data_refreshed_at": "2026-10-09T12:00:00Z",
+  "organization_id": "org-synthetic-0001"
+}

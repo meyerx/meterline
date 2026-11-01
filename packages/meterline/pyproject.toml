@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meterline"
+version = "0.2.0"
+description = "A common record format for AI usage data, with JSONL and Parquet writers."
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [{ name = "Xavier Meyer" }]
+keywords = ["ai", "llm", "usage", "cost", "tokens", "finops", "jsonl", "parquet"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Monitoring",
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/meyerx/meterline"
+Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline"
+Issues = "https://github.com/meyerx/meterline/issues"
+Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=17"]
+conformance = ["httpx>=0.27"]  # the conformance kit builds fault transports; every connector already depends on httpx
+dev = ["pytest>=8", "jsonschema>=4.18", "tomli>=2.0; python_version < '3.11'", "httpx>=0.27", "pytest-xdist==3.8.0", "ruff==0.17.3"]
+[tool.setuptools.packages.find]
+where = ["src"]

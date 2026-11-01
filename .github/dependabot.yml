@@ -1,0 +1,39 @@
+# Weekly update pull requests for the pinned GitHub Actions and the Python dependencies of every package under `packages/`.
+# Dependencies are declared with lower bounds only, so most pip pull requests are security updates; the
+# minimum-versions CI job keeps the lower bounds honest.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+  - package-ecosystem: pip
+    directories:
+      - "/packages/meterline"
+      - "/packages/meterline-anthropic"
+      - "/packages/meterline-anthropic-admin"
+      - "/packages/meterline-litellm"
+      - "/packages/meterline-copilot"
+      - "/packages/meterline-sim"
+      - "/packages/meterline-gold"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    # One pull request for every package directory: a version bump of a shared tool (ruff, pytest-xdist) otherwise
+    # opens seven pull requests and seven CI runs. Security updates stay ungrouped so each one lands on its own.
+    groups:
+      python-dependencies:
+        applies-to: version-updates
+        patterns:
+          - "*"
+    # ruff and pytest-xdist are also pinned in .github/workflows/ci.yml and asserted by tools/test_lint.py, which
+    # Dependabot does not edit: a grouped pull request that bumps either needs those pins pushed onto it before CI passes.

@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "starting_at": "2026-09-15T00:00:00Z",
+      "ending_at": "2026-09-16T00:00:00Z",
+      "results": [
+        {
+          "amount": "123.78912",
+          "currency": "USD",
+          "cost_type": "tokens",
+          "description": "Model A Usage - Input Tokens",
+          "model": "model-a",
+          "token_type": "uncached_input_tokens",
+          "service_tier": "standard",
+          "context_window": "0-200k",
+          "inference_geo": "global",
+          "speed": "standard",
+          "workspace_id": "wrkspc_a"
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "page_a"
+}

@@ -1,0 +1,26 @@
+{
+  "preset_format": 1,
+  "name": "matrix",
+  "org": {"name": "Example Matrix Co", "slug": "example-matrix", "email_domain": "example.com"},
+  "dimensions": ["line", "community"],
+  "units": {
+    "key": "company", "name": "Company", "kind": "company", "function": "executive",
+    "children": [
+      {"key": "alpha", "name": "Alpha", "kind": "team", "function": "sales", "size": 10},
+      {"key": "beta", "name": "Beta", "kind": "team", "function": "engineering", "size": 9}
+    ]
+  },
+  "matrix_units": [
+    {"key": "guild", "name": "Guild", "dimension": "community", "kind": "group",
+     "members": {"from_units": ["beta"], "count": 3}}
+  ],
+  "profiles": {"counts": {"dormant": 4, "curious": 4, "office_worker": 5, "developer": 5, "power_user": 2}},
+  "developer_functions": ["engineering"],
+  "parameters": {
+    "providers": {
+      "github_copilot": {"granted_units": ["beta"], "included_credits_per_seat": "100"},
+      "litellm": {"accounts": ["sa01", "sa03"]}
+    },
+    "events": {"reorganisation": {"unit": "alpha"}, "joiners_leavers": {"min_per_period": 1}}
+  }
+}

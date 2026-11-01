@@ -1,0 +1,48 @@
+{
+  "description": "Which files of a gold folder may be served to which reader. serve: audience-only = only readers of that audience (a keyed folder only to the owner of the key); central-only = only the central team; never = no reader, only the people who run the build. contains_person_keys: a file under the pattern holds pseudonymous person or manager keys, in a column or in a path. hidden_marker: the name of the column that marks withheld values in the files under the pattern, or null. The prose twin is the table 'What a build writes' in the meterline-gold README; a test holds the two together.",
+  "gold_schema_version": "2.0",
+  "rules": [
+    {
+      "audience": "central",
+      "contains_person_keys": true,
+      "hidden_marker": null,
+      "pattern": "central/*",
+      "serve": "central-only"
+    },
+    {
+      "audience": "exec",
+      "contains_person_keys": false,
+      "hidden_marker": "hidden",
+      "pattern": "exec/*",
+      "serve": "audience-only"
+    },
+    {
+      "audience": "manager",
+      "contains_person_keys": true,
+      "hidden_marker": "hidden",
+      "pattern": "manager/{manager_key}/*",
+      "serve": "audience-only"
+    },
+    {
+      "audience": "person",
+      "contains_person_keys": true,
+      "hidden_marker": "hidden",
+      "pattern": "person/{person_key}/*",
+      "serve": "audience-only"
+    },
+    {
+      "audience": "none",
+      "contains_person_keys": true,
+      "hidden_marker": null,
+      "pattern": "delivery/*",
+      "serve": "never"
+    },
+    {
+      "audience": "central",
+      "contains_person_keys": true,
+      "hidden_marker": null,
+      "pattern": "manifest.json",
+      "serve": "central-only"
+    }
+  ]
+}
