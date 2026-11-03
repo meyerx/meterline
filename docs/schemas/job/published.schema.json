@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "central/published.json of the published folder: what it holds and how fresh it is. Written by the publish step of meterline-job; central only. Generated from meterline_job/schemas.py; do not edit by hand.",
+  "properties": {
+    "data_complete_through": {
+      "anyOf": [
+        {
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the earliest complete_through of the configured connectors; null when one has none"
+    },
+    "forced_freezes": {
+      "description": "frozen months whose sources were not all final: the cap forced them",
+      "items": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "frozen_months": {
+      "description": "months delivered once and never changed",
+      "items": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "in_progress_months": {
+      "description": "months of the latest build that are refreshed on every run",
+      "items": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "key_rotations": {
+      "description": "frozen months whose hashing key differs from the latest build's: manager and person folders do not show them",
+      "items": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "latest_build": {
+      "description": "the name of the build the in-progress months come from (builds/<name>)",
+      "type": "string"
+    },
+    "policy_sha256": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "description": "per source build (the latest and each frozen month's), the hash of the policy it was made with",
+      "type": "object"
+    },
+    "published_at": {
+      "description": "when this folder was assembled (UTC)",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+\\+00:00$",
+      "type": "string"
+    },
+    "warnings": {
+      "description": "forced_freeze YYYY-MM and policy_changed YYYY-MM of this publish",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "latest_build",
+    "data_complete_through",
+    "published_at",
+    "frozen_months",
+    "in_progress_months",
+    "forced_freezes",
+    "key_rotations",
+    "policy_sha256",
+    "warnings"
+  ],
+  "title": "published.json",
+  "type": "object"
+}

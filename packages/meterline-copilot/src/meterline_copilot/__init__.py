@@ -9,7 +9,7 @@ except _NotInstalled:  # a source tree that is not installed
 
 from meterline import RunResult
 
-from .cli import StateError, run
+from .cli import StateError, complete_through, run
 from .client import ApiError, UnusableBody
 from .fetch import BadShape, PaginationError, RawFileExists
 
@@ -17,5 +17,5 @@ from .fetch import BadShape, PaginationError, RawFileExists
 # module (README, "Public interface"); every other module of this package is internal.
 __all__ = [
     "ApiError", "BadShape", "PaginationError", "RawFileExists", "RunResult", "StateError", "UnusableBody",
-    "__version__", "run",
+    "__version__", "complete_through", "run",
 ]

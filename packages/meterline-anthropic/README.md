@@ -52,6 +52,7 @@ All commands take `--data-dir` (default `exports/meterline-anthropic`, which is 
 |---|---|
 | `backfill --since YYYY-MM-DD` | Walks 31-day windows from the start date to today: per-user tokens and cost, organization totals, then daily activity and seat summaries from the start date. Resumes after a failure by re-running the same command. |
 | `daily [--since YYYY-MM-DD]` | Tokens, cost and organization totals for the current month, plus the previous month through the 8th; activity for every day since the last one loaded; yesterday's summary. Safe to run twice a day: unchanged data publishes nothing. With no `state.json` it stops (exit 2) and asks for `--since`, the first day of activity to load, rather than quietly fetching the month again; `--since` is ignored once a state file exists. |
+| `auto --since YYYY-MM-DD` | Runs `backfill --since` until a backfill has published in the data folder, and `daily` afterwards, so a scheduler can run the same line every day. A backfill that stopped half way is run again. `--since` is required and is ignored, with a note on stderr, once a backfill has published. Takes the options of `backfill`. The run manifest records the command that ran under `command` and `auto` under `requested`. |
 | `rebuild` | Re-creates every record from the raw store and the published run manifests. No API calls and no key needed. |
 
 Exit codes, which a run also reports as `failure_kind` (`RunResult.failure_kind` from Python; a manifest written by a run that failed a check carries it too):
@@ -78,7 +79,9 @@ result = run("backfill", since="2026-09-01", data_dir="exports/meterline-anthrop
 print(result.exit_code, result.records)
 ```
 
-`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does. `command` is `"backfill"`, `"daily"` or `"rebuild"`; the options are the command-line ones under Python names (`since`, `rate_per_minute`, `max_retry_after`, `parquet`) with the same defaults, and an unknown name raises `TypeError`. `credentials` is a mapping from `ANTHROPIC_ANALYTICS_KEY` to the key, or a function that returns such a mapping; when it is given the environment is not read, and the key goes only to the HTTP client. It returns a `RunResult` (from `meterline`): `exit_code`, `ok`, `batch_id`, `manifest_path`, `records` (published count per kind), `windows`, `skipped` and `unknown_fields` (the same list as the manifest's). A failed run does not raise: it returns the exit code the command line would have exited with (`1` an API or transport failure, `2` a failed check or a configuration error) after printing the same messages to stderr.
+`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does. `command` is `"backfill"`, `"daily"`, `"auto"` or `"rebuild"`; the options are the command-line ones under Python names (`since`, `rate_per_minute`, `max_retry_after`, `parquet`) with the same defaults, and an unknown name raises `TypeError`. `credentials` is a mapping from `ANTHROPIC_ANALYTICS_KEY` to the key, or a function that returns such a mapping; when it is given the environment is not read, and the key goes only to the HTTP client. It returns a `RunResult` (from `meterline`): `exit_code`, `ok`, `batch_id`, `manifest_path`, `records` (published count per kind), `windows`, `skipped` and `unknown_fields` (the same list as the manifest's). A failed run does not raise: it returns the exit code the command line would have exited with (`1` an API or transport failure, `2` a failed check or a configuration error) after printing the same messages to stderr.
+
+`complete_through(data_dir)` returns the last UTC day the connector holds as final in `data_dir`, as a `datetime.date`, or `None` before a first published backfill. It reads `activity_loaded` and `summaries_loaded` in the state file. For each, the answer is the last day of the unbroken run of loaded days, from the first one, whose period is final at the pull of the latest published run (its month ended more than 7 days before). It is the earlier of the two, so it is always the last day of a month. It makes no request and takes no lock, and a damaged state file raises `StateError`.
 
 ## Testing your integration without a key
 
@@ -185,7 +188,7 @@ What later releases keep working, under the rules of the compatibility policy in
 
 - the `meterline-anthropic` command line: its commands, options and exit codes, as listed under Commands;
 - the records it publishes under `records/`, in the v2 format of [`docs/records.md`](https://github.com/meyerx/meterline/blob/main/docs/records.md);
-- from Python, the names in `meterline_anthropic.__all__`: `run` and the `RunResult` it returns, the error classes `ApiError`, `StateError` and `RawFileExists`, and `__version__`;
+- from Python, the names in `meterline_anthropic.__all__`: `run`, `complete_through` and the `RunResult` it returns, the error classes `ApiError`, `StateError` and `RawFileExists`, and `__version__`;
 - the `meterline_anthropic.testing` module: `FakeAPI` and `sample_dataset()`, as described under Testing your integration without a key.
 
 Everything else is internal and may change in any release: every other module of the `meterline_anthropic` package, and the layout of the raw files, the run manifests and `state.json` (they are documented so you can read them, not so you can build on them).

@@ -12,7 +12,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # the event is part of the group, so a merge's light run never replaces a pending weekly or manual full run
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -20,20 +21,28 @@ env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
 jobs:
-  # A pull request runs the light jobs and tests on python 3.12. Python 3.10, minimum-versions and quickstart run on
-  # push to main, on the weekly schedule and on manual runs; minimum-versions also runs on a pull request that
-  # changes a package's pyproject.toml (it is the job that proves the declared lower bounds).
+  # What runs on which event, to keep the hosted-runner minutes down:
+  # - a pull request runs the light jobs (changes, lint, secrets) and, on python 3.12, the tests, the dependency audit
+  #   and the dashboard check; tools/ci_suite.py, as it is on the base branch, narrows the tests from the paths the
+  #   pull request changes (all of them; only the tests that read prose, for prose only; only the commit-message
+  #   check, for the backlog only). minimum-versions also runs on a pull request that changes a package's
+  #   pyproject.toml (it is the job that proves the declared lower bounds);
+  # - a push to main (a merge) runs the light jobs and the commit-message check only: the pull request already ran
+  #   the tests on that code;
+  # - the weekly schedule and manual runs run everything: both pythons, minimum-versions and quickstart.
   changes:
     name: changes (which heavy jobs this event runs)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      suite: ${{ steps.diff.outputs.suite }}
+      targets: ${{ steps.diff.outputs.targets }}
       minimum_versions: ${{ steps.diff.outputs.minimum_versions }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0  # the diff below needs the merge base of the pull request
-      - name: Decide whether minimum-versions runs
+      - name: Decide which tests and heavy jobs this event runs
         id: diff
         env:
           EVENT: ${{ github.event_name }}
@@ -41,49 +50,69 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          run=true
-          if [ "$EVENT" = "pull_request" ]; then
-            run=false
-            if git diff --name-only "${PR_BASE}...${PR_HEAD}" | grep -Eq '^packages/[^/]+/pyproject\.toml$'; then
-              run=true
-            fi
+          targets=tools
+          case "$EVENT" in
+            pull_request)
+              # --no-renames: a renamed file is listed under its old name too, so a document a package test reads
+              # cannot leave the full suite by moving
+              changed="$(git diff --name-only --no-renames "${PR_BASE}...${PR_HEAD}")"
+              # the script as it is on the base branch, so a pull request cannot narrow its own tests by editing it;
+              # no script on the base, a failing script or an unexpected answer all give the full suite; so do targets
+              # that fail or look wrong, since the narrower suite needs the repository scans they name
+              suite=full
+              if git show "${PR_BASE}:tools/ci_suite.py" > "$RUNNER_TEMP/ci_suite.py" 2>/dev/null; then
+                suite="$(python3 "$RUNNER_TEMP/ci_suite.py" --root . <<<"$changed" || echo full)"
+                targets="$(python3 "$RUNNER_TEMP/ci_suite.py" --root . --targets)" || suite=full
+              fi
+              minimum=false
+              if grep -Eq '^packages/[^/]+/pyproject\.toml$' <<<"$changed"; then
+                minimum=true
+              fi
+              ;;
+            push)
+              # main after a merge: the pull request ran the tests on this code; the weekly run covers drift
+              suite=none
+              minimum=false
+              ;;
+            *)
+              suite=full
+              minimum=true
+              ;;
+          esac
+          case "$suite" in none|tools|full) ;; *) suite=full ;; esac
+          if ! [[ "$targets" =~ ^tools( [A-Za-z0-9_./:-]+)*$ ]]; then
+            targets=tools
+            suite=full
           fi
-          echo "minimum_versions=${run}" >> "$GITHUB_OUTPUT"
-          echo "minimum-versions runs: ${run}"
+          echo "suite=${suite}" >> "$GITHUB_OUTPUT"
+          echo "targets=${targets}" >> "$GITHUB_OUTPUT"
+          echo "minimum_versions=${minimum}" >> "$GITHUB_OUTPUT"
+          echo "tests: ${suite} (${targets}); minimum-versions: ${minimum}"
 
   tests:
     name: tests (python ${{ matrix.python-version }})
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # no job-level if: a skipped matrix job reports under its unexpanded name, so the required check
+    # "tests (python 3.12)" would never arrive; the job always runs and its steps follow the suite
+    needs: changes
+    runs-on: ubuntu-latest
     timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.12"]
-        # python 3.10 is left out on a pull request (it runs on main, weekly and on manual runs)
-        exclude: ${{ fromJSON(github.event_name == 'pull_request' && '[{"python-version":"3.10"}]' || '[]') }}
+        # python 3.10 runs on the weekly and manual runs only
+        exclude: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '[]' || '[{"python-version":"3.10"}]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0  # tools/test_commit_messages.py reads the commits since its baseline
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: packages/*/pyproject.toml
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: ${{ matrix.python-version }}  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
       - name: Install every package (editable) with its dev and parquet extras, ruff for the lint tests, xdist for -n, build and twine for the README check
+        if: needs.changes.outputs.suite != 'none'
         run: |
           python -m pip install "ruff==0.17.3" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0" \
             -e "packages/meterline[dev,parquet]" \
@@ -92,9 +121,27 @@ jobs:
             -e "packages/meterline-litellm[dev,parquet]" \
             -e "packages/meterline-copilot[dev,parquet]" \
             -e "packages/meterline-sim[dev]" \
-            -e "packages/meterline-gold[dev]"
+            -e "packages/meterline-gold[dev]" \
+            -e "packages/meterline-job[dev]"
       - name: Run the test suite
+        if: needs.changes.outputs.suite == 'full'
         run: python -m pytest -q -n 4 packages tools -p no:cacheprovider -rs
+      - name: Run the tests that read prose, and the package tests that scan the whole repository (a prose-only pull request)
+        if: needs.changes.outputs.suite == 'tools'
+        env:
+          TARGETS: ${{ needs.changes.outputs.targets }}
+        run: |
+          set -euo pipefail
+          echo "pytest targets: ${TARGETS}"
+          # shellcheck disable=SC2086  # one argument per target
+          python -m pytest -q -n 4 ${TARGETS} -p no:cacheprovider -rs
+      - name: Install pytest (a backlog-only pull request, or a push to main)
+        if: needs.changes.outputs.suite == 'none' && hashFiles('tools/test_commit_messages.py') != ''
+        run: python -m pip install "pytest>=8"
+      - name: Check the commit messages (a backlog-only pull request, or a push to main)
+        # the check reads the private history, so the public export leaves the file out; the step then has nothing to run
+        if: needs.changes.outputs.suite == 'none' && hashFiles('tools/test_commit_messages.py') != ''
+        run: python -m pytest -q tools/test_commit_messages.py -p no:cacheprovider -rs
 
   minimum-versions:
     # Every dependency declares a lower bound; this job proves the bounds by installing the lowest version each
@@ -103,26 +150,13 @@ jobs:
     name: minimum versions (python 3.10, lowest direct dependencies)
     needs: changes
     if: needs.changes.outputs.minimum_versions == 'true'
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.10"
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: "3.10"  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
       - name: Install every package with the lowest version of each declared dependency
         run: |
           python -m pip install "uv==0.12.19" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0"
@@ -133,55 +167,56 @@ jobs:
             -e "packages/meterline-litellm[dev,parquet]" \
             -e "packages/meterline-copilot[dev,parquet]" \
             -e "packages/meterline-sim[dev]" \
-            -e "packages/meterline-gold[dev,parquet]"
+            -e "packages/meterline-gold[dev,parquet]" \
+            -e "packages/meterline-job[dev]"
           uv pip list --system
+      - name: Install each built wheel (not editable) in a fresh venv with the lowest version of each dependency it declares, and import it
+        # The editable install above runs the tests against this checkout, so it cannot show that a package needs a
+        # newer meterline than its meterline>= bound allows. Here each package is built, installed alone from its
+        # wheel with the lowest version of every dependency the wheel declares (meterline too, from the wheels built
+        # here or from PyPI, whichever is the lowest the bound allows), and every module of it is imported.
+        run: |
+          set -euo pipefail
+          for package in packages/*/pyproject.toml; do
+            python -m build --wheel --outdir "$RUNNER_TEMP/wheels" "$(dirname "$package")"
+          done
+          for init in packages/*/src/*/__init__.py; do
+            module="$(basename "$(dirname "$init")")"
+            package="$(basename "$(dirname "$(dirname "$(dirname "$init")")")")"
+            wheel="$(ls "$RUNNER_TEMP/wheels/${package//-/_}"-[0-9]*.whl)"
+            # the wheel's own declared dependencies, named one by one so that "lowest-direct" takes the lowest of each
+            reqs=()
+            while IFS= read -r req; do reqs+=("$req"); done < <(unzip -p "$wheel" '*.dist-info/METADATA' | sed -n 's/^Requires-Dist: //p' | grep -v 'extra ==' || true)
+            python -m venv "$RUNNER_TEMP/wheel-venvs/$package"
+            uv pip install --quiet --python "$RUNNER_TEMP/wheel-venvs/$package/bin/python" --resolution lowest-direct \
+              --find-links "$RUNNER_TEMP/wheels" "$wheel" ${reqs[@]+"${reqs[@]}"}
+            uv pip list --python "$RUNNER_TEMP/wheel-venvs/$package/bin/python" | grep -E '^(meterline|httpx)'
+            (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/wheel-venvs/$package/bin/python" -I -c "
+          import importlib, pkgutil
+          top = importlib.import_module('$module')
+          names = [m.name for m in pkgutil.walk_packages(top.__path__, '$module.') if not m.name.endswith('.__main__')]
+          for name in names:
+              importlib.import_module(name)
+          print('imported $module and', len(names), 'modules')")
+          done
       - name: Run the test suite
         run: python -m pytest -q -n 4 packages tools -p no:cacheprovider -rs
 
   quickstart:
     name: quick start (the README commands, fresh venv)
-    if: github.event_name != 'pull_request'
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.10"
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: "3.10"  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
-      # The commands come out of README.md itself, so the README and this job cannot drift apart.
-      # The tests and minimum-versions jobs already run the whole suite on every push, so on a push this job
-      # proves the README install and the demo; the README's suite line runs on schedule and workflow_dispatch.
-      - name: Run the README "Quick start" block (install only on push; install and full suite on schedule and manual runs)
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          SUITE_LINE: .venv/bin/python -m pytest -q packages
+      # The commands come out of README.md itself, so the README and this job cannot drift apart. The job runs on
+      # the weekly and manual runs only, so it runs the whole block, the README's suite line included.
+      - name: Run the README "Quick start" block (install and full suite)
         run: |
           python tools/readme_block.py "Quick start" > "$RUNNER_TEMP/quick-start.sh"
-          case "$EVENT_NAME" in
-            schedule|workflow_dispatch) ;;
-            *)
-              found="$(grep -c -x -F -- "$SUITE_LINE" "$RUNNER_TEMP/quick-start.sh" || true)"
-              if [ "$found" != 1 ]; then
-                echo "::error::README Quick start block must hold the line '$SUITE_LINE' exactly once, found $found"
-                exit 1
-              fi
-              grep -v -x -F -- "$SUITE_LINE" "$RUNNER_TEMP/quick-start.sh" > "$RUNNER_TEMP/quick-start.filtered.sh"
-              mv "$RUNNER_TEMP/quick-start.filtered.sh" "$RUNNER_TEMP/quick-start.sh"
-              ;;
-          esac
           cat "$RUNNER_TEMP/quick-start.sh"
           bash -euxo pipefail "$RUNNER_TEMP/quick-start.sh"
       - name: Run the README "Try it without a key" block (simulator, then gold)
@@ -202,26 +237,15 @@ jobs:
 
   audit:
     name: dependency audit (pip-audit)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    needs: changes
+    if: needs.changes.outputs.suite == 'full'
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.12"
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
       - name: Install every package with all its extras, and pip-audit
         run: |
           python -m pip install --upgrade pip
@@ -232,33 +256,21 @@ jobs:
             -e "packages/meterline-litellm[dev,parquet]" \
             -e "packages/meterline-copilot[dev,parquet]" \
             -e "packages/meterline-sim[dev]" \
-            -e "packages/meterline-gold[dev,parquet]"
+            -e "packages/meterline-gold[dev,parquet]" \
+            -e "packages/meterline-job[dev]"
       - name: Look up every installed dependency in the vulnerability databases
         # the packages themselves are installed editable from this checkout and are skipped
         run: python -m pip_audit --skip-editable --progress-spinner off
 
   lint:
     name: lint (ruff)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.12"
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
       - name: Install ruff
         run: python -m pip install "ruff==0.17.3"
       - name: Lint the package sources with the committed configuration (ruff.toml)
@@ -271,26 +283,15 @@ jobs:
     # F-43: axe-core on every tab of every audience page of the fixture build, both schemes; fails on a
     # critical or serious violation, or on a CSP violation.
     name: dashboard accessibility (axe-core 4.10)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    needs: changes
+    if: needs.changes.outputs.suite == 'full'
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        if: runner.environment == 'github-hosted'
         with:
           python-version: "3.12"
-      - name: Use the runner's pyenv Python (self-hosted)
-        if: runner.environment == 'self-hosted'
-        env:
-          PYTHON_VERSION: "3.12"  # same as setup-python's python-version above
-        run: |
-          set -euo pipefail
-          version="$(pyenv latest "$PYTHON_VERSION")"
-          "$(pyenv root)/versions/${version}/bin/python" -m venv "$RUNNER_TEMP/venv"
-          echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
-          echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-          echo "UV_PYTHON=$RUNNER_TEMP/venv/bin/python" >> "$GITHUB_ENV"  # uv pip --system skips venvs; point it at this one
-          "$RUNNER_TEMP/venv/bin/python" --version
       - name: Install meterline and gold
         run: python -m pip install -e packages/meterline -e packages/meterline-gold
       - name: Build the fixture gold folder
@@ -321,7 +322,7 @@ jobs:
 
   secrets:
     name: secret scan (gitleaks)
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

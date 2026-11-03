@@ -1,6 +1,6 @@
 # Connector contract
 
-This page lists everything a meterline connector must do. A connector is a package under `packages/` that reads one provider's usage API and writes the [five record kinds](../records.md). Every rule below has an identifier, `R01` to `R16`, and a check of the same name in the conformance kit, `meterline.conformance`. A connector that passes the kit keeps the contract; a rule the kit cannot test is listed at the end with who checks it. Some sections after the rules state a rule in prose: the account label, windows, raw file names, shape files and the shape check. Each of them ends with a line that starts `Held by:` and names the kit check or the test that holds the rule, or says that the pull request does.
+This page lists everything a meterline connector must do. A connector is a package under `packages/` that reads one provider's usage API and writes the [five record kinds](../records.md). Every rule below has an identifier, `R01` to `R19`, and a check of the same name in the conformance kit, `meterline.conformance`. A connector that passes the kit keeps the contract; a rule the kit cannot test is listed at the end with who checks it. Some sections after the rules state a rule in prose: the account label, windows, raw file names, shape files and the shape check. Each of them ends with a line that starts `Held by:` and names the kit check or the test that holds the rule, or says that the pull request does.
 
 Read this page with the [add-a-provider guide](../how-to/add-a-provider.md), which says in what order to build the parts. The four existing connectors show the rules working: `meterline-litellm` is the smallest.
 
@@ -49,6 +49,7 @@ The fields of `Connector` are:
 - `fail(fake, status, times)`: scripts the fake to answer `status` to the next `times` requests, whatever they ask for.
 - `bad_options`: options the connector must reject as input (exit 2).
 - `duplicate(fake)`: scripts the fake so that one answer holds a row, a page or a day twice, so that two records of the run would share a key (R16). Leave it out and R16 fails.
+- `complete_through`: the connector's `complete_through` function, and `is_final(day, pulled_at)`: the finality rule its fake's days follow, which is the connector's own `is_final` (R19). Leave either out and R19 fails.
 
 A failing check raises `ConformanceError`. Its message starts with the rule, its title and the anchor on this page, then says what was seen: `contract rule R10 (failure and resume): state.json lists loaded days under ['days_loaded'] although the run published nothing`. The kit needs `httpx`, which every connector already depends on (the core package lists it under the `conformance` extra). It uses no network, no key and no real clock: a fake clock whose `sleep` advances it stands in for time.
 
@@ -74,6 +75,9 @@ The table lists each rule and what the kit does to check it. The sections after 
 | [R14](#r14) | The public fake API offers a transport, a request log and fault scripting. | Reads the log after a run and after a scripted fault. |
 | [R15](#r15) | Raw and API JSON is read with `parse_float=Decimal`, so `rebuild` gives the live run's records byte for byte. | Backfills, rebuilds, and fails on any float that `json.loads` or `json.load` returns. |
 | [R16](#r16) | The batch checks run before anything is published. | Scripts a repeated row, page or day with `Connector.duplicate` and requires exit 2 and no record file. |
+| [R17](#r17) | One run per data folder: a run that finds the folder's lock held stops at once. | Holds the lock from a second open file, runs `daily`, and requires exit 1, no request and a folder tree that is unchanged. |
+| [R18](#r18) | `auto` runs `backfill` until a backfill has published, `daily` afterwards. | Runs `auto` in an empty folder, after a published backfill, after a backfill cut off half way and after a published `daily` alone, and without `since`; requires `backfill`, `daily`, `backfill`, `backfill` and exit 2, with `requested` `auto` in each manifest. |
+| [R19](#r19) | `complete_through` is the last day loaded as final, `None` before a first published backfill. | Calls it before any run and after a backfill cut off half way (`None`), then after a backfill and after a `daily` 40 days later; requires the last day the fake marks final, never a day after the last one served. |
 
 ### R01
 
@@ -81,14 +85,15 @@ The table lists each rule and what the kit does to check it. The sections after 
 
 - `raw/<endpoint>/<window>/<batch_id>.json.gz`: each response as received (the exact path below `raw/` is the connector's own).
 - `records/<kind>/<batch_id>.jsonl`: the records a run published, one folder per record kind that run published, where the kind is one of `usage`, `activity`, `seats`, `seat_assignments` and `org_totals`.
-- `runs/<batch_id>.json`: the run manifest.
+- `runs/<batch_id>.json`: the run manifest. The folder also holds `.lock`, the lock file of R17, which is not a manifest.
 - `state.json`: what is loaded and what is in progress (R04).
 
 The batch id is the run's `pulled_at` in UTC as `YYYYMMDDTHHMMSSZ`. The run manifest is a JSON object with at least these keys, which `RunResult` reads (R03):
 
 - `batch_id`, `command`, `status` (`published` or `failed`), `pulled_at` and `windows`;
 - `published_counts` (records published per kind), `raw_files` and `failures`;
-- `failure_kind`: `none` for a published run and `input` for a failed one (R11).
+- `failure_kind`: `none` for a published run and `input` for a failed one (R11);
+- `requested`, optional: `auto` when `auto` chose the command, else `null`. `command` is always the command that ran (`backfill` or `daily`). A manifest written before `auto` existed has no `requested`, and `rebuild` reads it as `null`.
 
 A run that fails on an API error writes no manifest: its progress is kept in `state.json` and the raw files already fetched.
 
@@ -171,14 +176,37 @@ A run that fails on an API error writes no manifest: its progress is kept in `st
 
 **Batch checks run before publish.** The connector calls `meterline.batch_failures` on the records of every kind before it writes any file. Any message stops the run with exit 2 (`failure_kind` `input`), writes a failed run manifest that lists the messages under `failures`, prints them on stderr and publishes nothing. One of the messages is `N duplicate record keys in the batch`, which is how the format keeps one record per key. An earlier check of the connector's own may refuse the answer first, such as one for a replayed page, report or date. R16 does not replace those checks and accepts either: what it requires is exit 2 and nothing published. The kit needs a way to make a key repeat, so a connector sets `Connector.duplicate`: a function that scripts the fake so that one answer holds a row, a page or a day twice. A connector whose records are built by summing rows per key cannot repeat a key from a repeated row, so it scripts a replayed page or day instead. The kit runs a backfill on that fake and requires exit 2, `failure_kind` `input`, and no record file under `records/`. If `duplicate` is not set, R16 fails and says so.
 
+### R17
+
+**One run per data folder.** Two runs on one data folder at the same time would write the same state file and could publish the same days twice. `run()` therefore takes the lock of the folder before it reads or writes anything, with `meterline.run.data_folder_lock(data_dir)`: an exclusive, non-blocking `fcntl.flock` on `<data_dir>/runs/.lock`, made `0600` in a `0700` folder (R05). The lock sits inside `runs/` so the data folder still holds exactly `raw`, `records`, `runs` and `state.json` (R01). The operating system releases it when the process ends, however it ends. A run that finds the lock held stops at once with exit 1, `failure_kind` `transient`, the message `data folder is in use by another run` on stderr, makes no request and writes nothing. `rebuild` takes the lock too; the silver copy of `meterline-job` and the export scan ignore the lock file. Where `fcntl` does not exist the lock is skipped with one warning, and the kit then has nothing to prove. The kit runs a backfill, holds the lock from a second open file in the same process, runs `daily`, and requires exit 1, no request, and the same folder tree and file contents as before (the lock file aside). A network file system is not tested: `flock` there depends on the file system.
+
+Held by: R17 of the kit.
+
+### R18
+
+**`auto`: backfill until a backfill has published, daily afterwards.** A scheduler runs the same line every day, so the choice between `backfill` and `daily` belongs to the connector, not to each job. `run("auto", since=...)` asks `meterline.run.auto_command(data_dir)` under the folder's lock (R17). It runs `backfill` while no file under `runs/` has `"command": "backfill"` and `"status": "published"`, and `daily` afterwards. `state.json` is not the signal: a backfill that stopped half way writes one, and the next `auto` must resume that backfill. A published `daily` is not a backfill either. `since` is required, and without it the run exits 2 (`input`) before any request and writes nothing; on the daily path it is ignored and the run says so on stderr. The manifest's `command` is the command that ran and its `requested` is `auto`, and `rebuild` reads such a manifest as it reads one without `requested` (R09). The kit runs `auto` in an empty folder (`backfill`), again a day later (`daily`, with the note on stderr), after a backfill cut off half way (`backfill`), after a published `daily --since` in an empty folder (`backfill`) and without `since` (exit 2, no request), then `rebuild` over the manifests `auto` wrote. A planted `auto_command` that reads `state.json`, or that counts any published manifest as a backfill, fails it.
+
+Held by: R18 of the kit.
+
+### R19
+
+**`complete_through`: the last day loaded as final.** A job that freezes a month must know which days can no longer change. `complete_through(data_dir)` answers from the state file and the connector's own `is_final` at the pull of the latest published run, as described under [the `run()` signature](#the-run-signature-and-the-credentials-rule). The answer is `None` before a first published backfill, also after a backfill that stopped half way. The kit calls it on an unused folder and after a backfill cut off half way (`None` both times). It then runs a backfill from `since` and a `daily` 40 days later, so that a whole month of the fake's days is final. After each it requires the last day from `since` that `Connector.is_final` marks final at the pull, and never a day after the last one the fake served (the day before the pull). A planted `complete_through` that returns the last day loaded, final or not, fails it.
+
+A day counts as final only when every kind of record the connector publishes holds it as final, so `Connector.is_final` is the strictest of its rules: a connector whose billing totals close with the month, such as `meterline-copilot`, returns a day of that month only once the month is final. After the backfill the kit also requires that no record the backfill published with `is_final` false ends on or before the answer, which does not depend on `Connector.is_final`.
+
+Held by: R19 of the kit.
+
 ## The `run()` signature and the credentials rule
 
 Each connector exports `run(command, *, data_dir, credentials=None, transport=None, clock=..., sleep=..., now=None, jitter=..., wall=..., **options) -> RunResult` and lists it in `__all__`. The command line `main()` is a thin wrapper over it.
 
-- `command` is `backfill`, `daily` or `rebuild`. An unknown command raises `ValueError`; an unknown option or a missing required one raises `TypeError`.
+- `command` is `backfill`, `daily`, `auto` or `rebuild`. An unknown command raises `ValueError`; an unknown option or a missing required one raises `TypeError`.
+- `auto` runs `backfill` until a backfill has published in the data folder, and `daily` afterwards. The choice is `meterline.run.auto_command(data_dir)`, made under the folder's lock (R17): `backfill` while no file under `runs/` has `"command": "backfill"` and `"status": "published"`, `daily` afterwards. A `state.json` is not enough, because a backfill that stopped half way leaves one, and the next `auto` resumes that backfill. `auto` takes the options of `backfill`. `since` is required, and without it the run exits 2 (`input`) before anything is done; on the daily path it is ignored and the run says so on stderr. The run manifest's `command` is the command that ran and its `requested` is `auto`. A connector calls `meterline.run.run_auto(data_dir, options, run_one)`, where `run_one(command, options)` runs `backfill` or `daily` as it always does.
 - `credentials` maps the key variable names to their values, or is a function without arguments that returns such a mapping. When it is given, the process environment is not read for those names, and a name left out counts as unset. When it is `None`, the environment is read, as the command line does.
 - `transport` is an `httpx` transport; `None` uses the network.
 - A failed run does not raise: it prints the same message as the command line and returns the exit code in `RunResult`.
+
+Each connector also exports `complete_through(data_dir) -> datetime.date | None` and lists it in `__all__`: the last UTC day it holds as final in that data folder. It reads the days its state file lists as loaded and applies its own `is_final` at the `pulled_at` of the latest published run. The answer is the last day of the unbroken run of loaded days, from the first one, that is final then; `meterline.run.final_through(data_dir, loaded, is_final)` computes it. It is `None` before a first published backfill, and it never names a day the connector has not loaded. A connector that keeps more than one list of loaded days returns the earlier answer: `meterline-anthropic` keeps activity and summaries. It makes no request and takes no lock. A job that freezes a month reads it (R19).
 
 ## The account label when a response has none
 
@@ -377,7 +405,7 @@ Some rules have no check in the kit. They are reviewed in the pull request:
 - that the wiring checklist is complete for a new package;
 - paging: the kit runs the connector's own fake with its defaults, so it never asks whether the connector requested a later page or refused a page that came back. R16 only requires exit 2 for whatever the connector's `duplicate` hook scripts;
 - the window of a query: its size, against the largest span that the provider documents;
-- finality: the values of `is_final` and the number of days after which a record is final;
+- finality: the values of `is_final` and the number of days after which a record is final. R19 takes the connector's own rule as given (`Connector.is_final`) and checks only that `complete_through` follows it;
 - the re-read depth: how many closed days `daily` reads again. R08 runs `daily` twice, but it does not look at which days are read;
 - the summing of provider rows that share a record key, when the provider sends them as separate rows.
 

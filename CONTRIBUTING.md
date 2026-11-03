@@ -25,7 +25,7 @@ Amounts are `Decimal` end to end, never `float`.
 
 ## Licence
 
-meterline is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)). By submitting a contribution you agree that it is licensed under the same terms.
+meterline is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)). A contributor agreement will be required before a pull request can be merged. It is not set up yet: open your pull request anyway, and it will wait for the agreement.
 
 ## Security
 

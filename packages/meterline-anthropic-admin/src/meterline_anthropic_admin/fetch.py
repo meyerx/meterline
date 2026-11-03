@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from meterline import http
+from meterline.run import requested_command
 
 from .client import COST_PATH, USAGE_PATH, AdminClient, Page
 from .normalise import parse_timestamp
@@ -158,6 +159,7 @@ class RunManifest:
     published_counts: Dict[str, int] = field(default_factory=dict)
     failures: List[str] = field(default_factory=list)
     unknown_fields: List[Dict[str, Any]] = field(default_factory=list)  # fields the connector does not know: endpoint, path, count
+    requested: Optional[str] = field(default_factory=requested_command)  # "auto" when auto chose the command; None otherwise
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -175,6 +177,7 @@ class RunManifest:
             "published_counts": dict(self.published_counts),
             "failures": list(self.failures),
             "unknown_fields": [dict(item) for item in self.unknown_fields],
+            "requested": self.requested,
         }
 
     def to_json(self) -> str:
@@ -193,4 +196,5 @@ class RunManifest:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         data["pulled_at"] = parse_timestamp(data["pulled_at"])
         data.pop("failure_kind", None)  # derived from the status when written
+        data.setdefault("requested", None)  # a manifest written before auto existed has no requested
         return cls(**data)

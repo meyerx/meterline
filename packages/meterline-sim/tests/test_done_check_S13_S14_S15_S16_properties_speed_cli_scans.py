@@ -2,6 +2,7 @@
 
 import csv
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -78,6 +79,7 @@ def within_bound(seconds):
 
 
 @pytest.mark.timing
+@pytest.mark.skipif(bool(os.environ.get("CI")), reason="speed check: run in the done gate, not in CI")
 def test_done_check_S14_speed(tmp_path):
     started = time.perf_counter()
     gen(tmp_path, "tiny", 7, 6)

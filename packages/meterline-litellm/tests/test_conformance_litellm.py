@@ -5,7 +5,8 @@ from datetime import date
 import pytest
 
 from meterline.conformance import RULES, Connector, check
-from meterline_litellm import run
+from meterline_litellm import complete_through, run
+from meterline_litellm.normalise import is_final_day
 from meterline_litellm.testing import PATH_A, FakeAPI
 
 def _duplicate(fake):
@@ -24,6 +25,8 @@ CONNECTOR = Connector(
     fail=lambda fake, status, times: fake.fail(PATH_A, status, times=times),
     bad_options={"rate_per_minute": 0},
     duplicate=_duplicate,
+    complete_through=complete_through,
+    is_final=is_final_day,
 )
 
 

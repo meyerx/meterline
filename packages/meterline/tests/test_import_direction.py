@@ -4,7 +4,9 @@
 - a connector (``meterline_anthropic``, ``meterline_anthropic_admin``, ``meterline_litellm``, ``meterline_copilot``)
   imports the core only: never gold, the simulator or another connector;
 - gold and the simulator import the core only (the simulator is the independent
-  oracle for gold, and neither may lean on a connector's code).
+  oracle for gold, and neither may lean on a connector's code);
+- the job (``meterline_job``) is the one package that sits above the others: it imports the core, gold and the
+  connectors, and nothing imports it.
 
 The check reads every source file under ``packages/*/src`` with ``ast`` (nothing
 is imported), including imports inside functions and ``importlib.import_module``
@@ -26,8 +28,11 @@ def _package_rules():
     return {name.replace("-", "_"): (set() if name == CORE else {CORE}) for name in names}
 
 
+JOB = "meterline_job"
 ALLOWED = _package_rules()
-CONNECTORS = {name for name in ALLOWED if name not in (CORE, "meterline_gold", "meterline_sim")}
+CONNECTORS = {name for name in ALLOWED if name not in (CORE, "meterline_gold", "meterline_sim", JOB)}
+if JOB in ALLOWED:
+    ALLOWED[JOB] = {CORE, "meterline_gold"} | CONNECTORS
 
 
 def _top_level(name):

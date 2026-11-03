@@ -16,7 +16,47 @@ except _NotInstalled:  # a source tree that is not installed
     __version__ = "0+unknown"
 PRIVATE_UMASK = 0o077  # outputs hold per-person data: files 0600, folders 0700
 
-__all__ = ["build", "servable", "GOLD_SCHEMA_VERSION", "__version__", "InputError", "BuildFailure"]
+__all__ = ["build", "servable", "policy_privacy", "dataset_forms", "write_parquet_text", "GOLD_SCHEMA_VERSION", "__version__",
+           "InputError", "BuildFailure"]
+
+
+def dataset_forms():
+    """``{(audience, dataset): (schema name, key columns)}`` for every file an audience folder holds.
+
+    ``audience`` is ``central``, ``exec``, ``manager`` or ``person`` (``delivery`` is left out); ``dataset`` is the file
+    stem; the schema name is the key of the column list the file is written with (the exec and person forms have their
+    own); the key columns are the dataset's primary key. Internal-stable: ``meterline-job`` composes published files
+    from it."""
+    from meterline_gold import dataset_docs, write
+
+    forms = {}
+    for _stem, schema_name, dataset, audiences in dataset_docs.VARIANTS:
+        for audience in audiences:
+            if audience != "delivery":
+                forms[(audience, dataset)] = (schema_name, tuple(write.DATASET_KEYS[dataset]))
+    return forms
+
+
+def write_parquet_text(path, schema_name, header, rows):
+    """Write the Parquet twin of a CSV file of a gold folder from its text (see ``meterline_gold.write``); internal-stable."""
+    from meterline_gold import write
+
+    write.write_parquet_text(path, schema_name, header, rows)
+
+
+def policy_privacy(policy):
+    """``(sha256, parameters)`` of the policy file at ``policy``: the hash a build records as ``inputs.policy_sha256``
+    and the privacy parameters ``{"k": ..., "exec_max_depth": ...}`` that decide what a reader sees.
+
+    Internal-stable: ``meterline-job`` reads it to tell whether a frozen month was published under other privacy
+    parameters than the current ones. Raises InputError when the file cannot be read or is not a valid policy."""
+    import hashlib
+
+    from meterline_gold import params
+
+    model = params.load_policy(policy)
+    digest = hashlib.sha256(params.canonical_hash_input(model).encode("utf-8")).hexdigest()
+    return digest, {"k": model.privacy.k, "exec_max_depth": model.audiences.exec.max_depth}
 
 
 def build(silver, org, policy, prices, out, invoice=None, parquet=False, key=None, threads=None):

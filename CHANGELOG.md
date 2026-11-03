@@ -2,6 +2,83 @@
 
 All notable changes to this project are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and each package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+`export/vX.Y` names an export of the repository, not a package version.
+
+## [meterline 0.3.0] - 2026-11-02
+
+### Added
+
+- `meterline.run.data_folder_lock`, the lock every connector takes on its data folder, and contract rule R17 for it.
+- `meterline.run.auto_command` and `meterline.run.final_through`, which decide what `auto` runs and the last final day of a data folder; the run manifest gains an optional field, `requested`.
+- Contract rules R18 (`auto`) and R19 (`complete_through`) in `meterline.conformance`; `Connector` gains `complete_through` and `is_final`. R09 now also runs `rebuild` over manifests without `requested`.
+
+## [meterline-anthropic 0.2.1] - 2026-11-02
+
+### Added
+
+- `auto`, a command of the connector: `backfill` until a backfill has published in the data folder, `daily` afterwards. It needs `--since`, which it uses only when it backfills. The run manifest gains an optional field, `requested` (`auto` when `auto` chose the command, else `null`); a manifest without it is still read by `rebuild`.
+- `complete_through(data_dir)`: the last UTC day the connector holds as final in that data folder (`None` before a first published backfill).
+- A run takes an exclusive lock on `<data folder>/runs/.lock`; a second run on the same folder stops at once with exit 1.
+
+### Changed
+
+- Requires `meterline>=0.3`.
+
+## [meterline-anthropic-admin 0.1.1] - 2026-11-02
+
+### Added
+
+- `auto`, a command of the connector: `backfill` until a backfill has published in the data folder, `daily` afterwards. It needs `--since`, which it uses only when it backfills. The run manifest gains an optional field, `requested` (`auto` when `auto` chose the command, else `null`); a manifest without it is still read by `rebuild`.
+- `complete_through(data_dir)`: the last UTC day the connector holds as final in that data folder (`None` before a first published backfill).
+- A run takes an exclusive lock on `<data folder>/runs/.lock`; a second run on the same folder stops at once with exit 1.
+
+### Changed
+
+- Requires `meterline>=0.3`.
+
+## [meterline-copilot 0.1.1] - 2026-11-02
+
+### Added
+
+- `auto`, a command of the connector: `backfill` until a backfill has published in the data folder, `daily` afterwards. It needs `--since`, which it uses only when it backfills. The run manifest gains an optional field, `requested` (`auto` when `auto` chose the command, else `null`); a manifest without it is still read by `rebuild`.
+- `complete_through(data_dir)`: the last UTC day the connector holds as final in that data folder (`None` before a first published backfill).
+- A run takes an exclusive lock on `<data folder>/runs/.lock`; a second run on the same folder stops at once with exit 1.
+
+### Changed
+
+- Requires `meterline>=0.3`.
+
+## [meterline-litellm 0.1.1] - 2026-11-02
+
+### Added
+
+- `auto`, a command of the connector: `backfill` until a backfill has published in the data folder, `daily` afterwards. It needs `--since`, which it uses only when it backfills. The run manifest gains an optional field, `requested` (`auto` when `auto` chose the command, else `null`); a manifest without it is still read by `rebuild`.
+- `complete_through(data_dir)`: the last UTC day the connector holds as final in that data folder (`None` before a first published backfill).
+- A run takes an exclusive lock on `<data folder>/runs/.lock`; a second run on the same folder stops at once with exit 1.
+
+### Changed
+
+- Requires `meterline>=0.3`.
+
+## [meterline-gold 0.2.0] - 2026-11-02
+
+### Added
+
+- Three small accessors, `write_parquet_text`, `dataset_forms` and `policy_privacy`, that `meterline-job` composes the published folder from (internal-stable, not part of the public API).
+
+## [meterline-job 0.1.0] - 2026-11-02
+
+### Added
+
+- `meterline-job`: the daily job as a command (`meterline-job run` and `meterline-job check`), from `examples/03-daily-job`. It runs each connector's `auto` command, then builds silver and gold, and prints one JSON status line per step. Each step can run alone, a gold failure exits 4 on its own (the connectors keep 0 to 3), `parquet` and `invoice` reach gold, and a leftover build `.tmp` folder is cleared.
+- It also locks the gold folder, so two jobs on one folder do not run at once.
+- The `publish` step. Each run builds gold into `builds/<date>` (then `-2`, `-3`), never over an existing folder; a month is frozen by copy into `frozen/<month>` with a `SHA256SUMS` file once every source has final data for it and `freeze_after_days` have passed (or forced by `freeze_cap_extra_days`); `published` is a link to an assembled `published-<time>` folder, swapped in at once after the checksums, gold's A09 check and a permission check; manager and person folders restart at a change of the hashing key; `central/published.json` and a `freshness.json` per audience folder say how fresh it is (schemas in `docs/schemas`). New `[publish]` settings. A gold failure no longer leaves a day's folder that blocks a rerun.
+- Docs: the delivery rule (a month is refreshed until it is frozen, then delivered once) is written the same way in the gold README, `PRIVACY.md`, `THREAT-MODEL.md` and the operations page; the erasure steps no longer rotate the hashing key; the dashboard example serves `published/`.
+
+### Known limits
+
+- Tested against the connectors' fake APIs only; it is not a connector and does not run through the connector kit.
+
 ## [Unreleased]
 
 ### Added

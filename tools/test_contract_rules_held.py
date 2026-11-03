@@ -1,4 +1,4 @@
-"""E3: each rule the connector contract states in prose, outside the kit rules R01 to R16, names the kit check or the test
+"""E3: each rule the connector contract states in prose, outside the kit rules R01 to R19, names the kit check or the test
 that holds it, on a line that starts "Held by:". A kit check is a rule id (`R08`); a test is `path/to/test_file.py::test_name`
 and must exist in the tree. A rule that nothing holds says so in plain words and is "reviewed in the pull request".
 

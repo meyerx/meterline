@@ -108,7 +108,7 @@ class Item:
     add: Callable                              # (Package) -> the exact line or table row to add, as text
     tests: Tuple[str, ...] = ()                # 'tools/test_x.py::test_name' of the tools tests that check this place
     connector_only: bool = False               # only a package that calls a provider's API (depends on httpx) has this place
-    private_only: bool = False                 # lives in docs/dev, which the public tree does not ship: skipped when the file is absent
+    private_only: bool = False                 # lives in a file the public tree does not ship (docs/dev, .github/dependabot.yml): skipped when the file is absent
     listed_when_unwired: bool = True           # False when a package made by tools/new_connector.py already satisfies it
 
 
@@ -263,7 +263,8 @@ def dependabot_directories(root):
 
 def dependabot(root, dist):
     if read(root, ".github/dependabot.yml") is None:
-        return [".github/dependabot.yml is not there"]
+        # the export leaves dependabot.yml out of the public tree: nothing to wire there; in the working repository a missing file is a problem
+        return [] if not in_working_repo(root) else [".github/dependabot.yml is not there"]
     return [] if "packages/%s" % dist in dependabot_directories(root) else ['the pip entry of .github/dependabot.yml does not list "/packages/%s"' % dist]
 
 
@@ -487,7 +488,7 @@ ITEMS = (
     Item("ci", CI_YML, "The package is installed by every install block of the CI workflow.", ci, _ci_add,
          tests=("tools/test_release_path.py::test_ci_audits_the_dependencies",)),
     Item("dependabot", ".github/dependabot.yml", "Dependabot watches the package.", dependabot, _dependabot_add,
-         tests=("tools/test_release_path.py::test_dependabot_watches_the_actions_and_every_package",)),
+         tests=("tools/test_release_path.py::test_dependabot_watches_the_actions_and_every_package",), private_only=True),
     Item("release-decision", "%s and %s" % (RELEASE_YML, RELEASING), "The package is released, or the procedure says it is not released yet.",
          release_problems, _release_add,
          tests=("tools/test_release_path.py::test_release_yml_accepts_exactly_the_packages_of_the_repository",

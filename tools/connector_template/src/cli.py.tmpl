@@ -1,6 +1,7 @@
 """The @@DIST@@ command line and its Python entry point ``run``.
 
-Commands: ``backfill --since --provider-account-id``, ``daily --provider-account-id`` and ``rebuild``. Exit codes
+Commands: ``backfill --since --provider-account-id``, ``daily --provider-account-id``, ``auto --since
+--provider-account-id`` (backfill until one has published, daily afterwards) and ``rebuild``. Exit codes
 (docs/reference/connector-contract.md): 0 ok; 1 transient (run again later); 2 input or checks; 3 permanent provider
 refusal. The key comes from ``@@ENV@@``.
 """
@@ -19,14 +20,18 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 from meterline import KINDS, RunResult, batch_failures, note_failure, result_of_run, run_manifests
 from meterline.published import drop_unchanged, load_published
 from meterline.run import (
+    AUTO,
     EXIT_CHECKS,
     EXIT_OK,
     EXIT_PERMANENT,
     EXIT_TRANSIENT,
     UnknownFields,
     WritePhase,
+    data_folder_lock,
     exit_code_of_status,
+    final_through,
     note_unknown_fields,
+    run_auto,
     unknown_fields_of,
     warn_unknown_fields,
 )
@@ -189,7 +194,7 @@ def run_rebuild(data_dir: Path) -> int:
 
 
 _RUN_OPTIONS = ("since", "provider_account_id", "rate_per_minute", "max_retry_after")
-_OPTIONS = {"backfill": _RUN_OPTIONS, "daily": _RUN_OPTIONS, "rebuild": ()}
+_OPTIONS = {"backfill": _RUN_OPTIONS, "daily": _RUN_OPTIONS, AUTO: _RUN_OPTIONS, "rebuild": ()}
 
 
 def run(command: str, *, data_dir: Any, credentials: Any = None, transport: Any = None,
@@ -198,7 +203,8 @@ def run(command: str, *, data_dir: Any, credentials: Any = None, transport: Any 
         wall: Callable[[], Any] = time.time, **options: Any) -> RunResult:
     """Run one command from Python and return its ``RunResult``; a failed run returns its exit code, it does not raise.
 
-    ``command`` is ``"backfill"``, ``"daily"`` or ``"rebuild"``. ``options`` are the command-line options under their
+    ``command`` is ``"backfill"``, ``"daily"``, ``"auto"`` or ``"rebuild"``; ``auto`` runs ``backfill`` until a backfill
+    has published in ``data_dir`` and ``daily`` afterwards, and exits 2 without ``since``. ``options`` are the command-line options under their
     Python names (``since``, ``provider_account_id``, ``rate_per_minute``, ``max_retry_after``); ``provider_account_id``
     is required by ``backfill`` and ``daily`` and is kept in the run manifest for ``rebuild``. An unknown option, or a
     missing required one, raises ``TypeError``.
@@ -211,13 +217,20 @@ def run(command: str, *, data_dir: Any, credentials: Any = None, transport: Any 
     if unknown:
         raise TypeError("run(%r) got an unexpected option: %s" % (command, ", ".join(unknown)))
     data_path = Path(data_dir)
-    before = run_manifests(data_path)
     old_umask = os.umask(PRIVATE_UMASK)
     try:
-        code = _run_command(command, data_path, credentials, transport, options, clock, sleep, now, jitter, wall)
+        with data_folder_lock(data_path) as free:
+            if not free:
+                return RunResult(exit_code=EXIT_TRANSIENT)  # another run holds this data folder (contract rule R17)
+            before = run_manifests(data_path)
+
+            def run_one(chosen: str, given: Dict[str, Any]) -> int:
+                return _run_command(chosen, data_path, credentials, transport, given, clock, sleep, now, jitter, wall)
+
+            code = run_auto(data_path, options, run_one) if command == AUTO else run_one(command, options)
+            return result_of_run(data_path, code, before)
     finally:
         os.umask(old_umask)
-    return result_of_run(data_path, code, before)
 
 
 def _run_command(command: str, data_dir: Path, credentials: Any, transport: Any, options: Dict[str, Any],
@@ -274,13 +287,25 @@ def _run_command(command: str, data_dir: Path, credentials: Any, transport: Any,
         return _run_pull(command, client, data_dir, first, yesterday, pulled_at, state, str(account))
 
 
+def complete_through(data_dir: Any) -> Optional[date]:
+    """The last UTC day this connector has loaded as final in ``data_dir``, ``None`` before a first published backfill.
+
+    Read from the state file's ``days_loaded`` and ``is_final`` at the pull of the latest published run: the last day of
+    the unbroken run of loaded days from the first one that is final then (``meterline.run.final_through``, contract
+    rule R19). No request, no lock; a damaged state file raises ``StateError``."""
+    state = read_state(Path(data_dir), _check_state)
+    if state is None:
+        return None
+    return final_through(data_dir, (date.fromisoformat(d) for d in state["days_loaded"]), is_final)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="@@DIST@@", description=__doc__.split("\n")[0])
     parser.add_argument("--data-dir", default="exports/@@DIST@@")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("backfill", "daily"):
+    for name in ("backfill", "daily", AUTO):
         p = sub.add_parser(name)
-        p.add_argument("--since", type=date.fromisoformat, required=name == "backfill")
+        p.add_argument("--since", type=date.fromisoformat, required=name != "daily")
         p.add_argument("--provider-account-id", dest="provider_account_id", required=True)
         p.add_argument("--rate-per-minute", dest="rate_per_minute", type=int, default=60)
         p.add_argument("--max-retry-after", dest="max_retry_after", type=int, default=300)

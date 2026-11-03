@@ -28,10 +28,14 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, 
 
 from meterline import RunResult, note_failure, result_of_run, run_manifests
 from meterline.run import (
+    AUTO,
     EXIT_PERMANENT,
     EXIT_TRANSIENT,
     WritePhase,
+    data_folder_lock,
     exit_code_of_status,
+    final_through,
+    run_auto,
     unknown_fields_of,
     warn_unknown_fields,
 )
@@ -700,6 +704,21 @@ def run_rebuild(data_dir: Path, parquet: bool = False) -> int:
     return EXIT_OK
 
 
+def complete_through(data_dir: Union[str, Path]) -> Optional[date]:
+    """The last UTC day this connector has loaded as final in ``data_dir``, ``None`` before a first published backfill.
+
+    Read from the state file: for ``activity_loaded`` and for ``summaries_loaded``, the last day of the unbroken run of
+    loaded days from the first one whose period is final (``is_final_period``: its month ended more than 7 days before
+    the pull of the latest published run), and the earlier of the two (``meterline.run.final_through``, contract rule
+    R19). So the answer is the last day of a month, or ``None``. No request, no lock; a damaged state file raises
+    ``StateError``."""
+    state = _read_state(Path(data_dir))
+    if state is None:
+        return None
+    ends = [final_through(data_dir, _days(state.get(key) or []), is_final_period) for key in ("activity_loaded", "summaries_loaded")]
+    return None if None in ends else min(e for e in ends if e is not None)
+
+
 # ---- entry point ------------------------------------------------------------------
 
 
@@ -729,6 +748,8 @@ def _build_parser() -> argparse.ArgumentParser:
     back.add_argument("--since", type=_parse_date, required=True, help="first day to load, YYYY-MM-DD")
     daily = sub.add_parser("daily", parents=[common], help="current month (plus previous month until the 8th), activity since the last day loaded")
     daily.add_argument("--since", type=_parse_date, default=None, help="first day of activity to load; needed only when there is no state file")
+    auto = sub.add_parser("auto", parents=[common], help="backfill until a backfill has published, daily afterwards")
+    auto.add_argument("--since", type=_parse_date, required=True, help="first day of the backfill; ignored once one has published")
     sub.add_parser("rebuild", parents=[common], help="re-create records from the raw store; no API calls")
     return parser
 
@@ -758,7 +779,10 @@ def run(
     wall: Callable[[], Any] = time.time,
     **options: Any,
 ) -> RunResult:
-    """Run one command ("backfill", "daily" or "rebuild") and return its ``RunResult``.
+    """Run one command ("backfill", "daily", "auto" or "rebuild") and return its ``RunResult``.
+
+    ``auto`` runs ``backfill`` until a backfill has published in ``data_dir`` and ``daily`` afterwards
+    (``meterline.run.auto_command``); it needs ``since`` (exit 2 without it), which it uses only when it backfills.
 
     ``options`` are the command-line options under their Python names (``since``, ``rate_per_minute``,
     ``max_retry_after``, ``parquet``) with the command-line defaults. ``credentials`` maps the environment variable
@@ -769,23 +793,31 @@ def run(
     unknown = sorted(set(options) - set(_OPTION_DEFAULTS))
     if unknown:
         raise TypeError("run() got an unexpected option: %s" % ", ".join(unknown))
-    if command not in ("backfill", "daily", "rebuild"):
-        raise ValueError("command must be backfill, daily or rebuild, not %r" % (command,))
+    if command not in ("backfill", "daily", AUTO, "rebuild"):
+        raise ValueError("command must be backfill, daily, auto or rebuild, not %r" % (command,))
     opts = {**_OPTION_DEFAULTS, **options}
     since = opts["since"]
     if isinstance(since, str):
         since = _parse_date(since)
     data_path = Path(data_dir)
-    before = run_manifests(data_path)
     old_umask = os.umask(PRIVATE_UMASK)
     try:
-        code = _run(
-            command, data_path, since, opts["rate_per_minute"], opts["max_retry_after"], bool(opts["parquet"]),
-            credentials=credentials, transport=transport, clock=clock, sleep=sleep, now=now, jitter=jitter, wall=wall,
-        )
+        with data_folder_lock(data_path) as free:
+            if not free:
+                return RunResult(exit_code=EXIT_TRANSIENT)  # another run holds this data folder (contract rule R17)
+            before = run_manifests(data_path)
+
+            def run_one(chosen: str, given: Dict[str, Any]) -> int:
+                return _run(
+                    chosen, data_path, given.get("since"), opts["rate_per_minute"], opts["max_retry_after"], bool(opts["parquet"]),
+                    credentials=credentials, transport=transport, clock=clock, sleep=sleep, now=now, jitter=jitter, wall=wall,
+                )
+
+            given = {**opts, "since": since}
+            code = run_auto(data_path, given, run_one) if command == AUTO else run_one(command, given)
+            return result_of_run(data_path, code, before)
     finally:
         os.umask(old_umask)
-    return result_of_run(data_path, code, before)
 
 
 def _run(

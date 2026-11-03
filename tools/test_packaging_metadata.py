@@ -22,7 +22,7 @@ REPO_URL = "https://github.com/meyerx/meterline"
 DISTRIBUTIONS = {"yaml": "PyYAML", "typing_extensions": "typing_extensions", "httpx": "httpx", "duckdb": "duckdb",
                  "pydantic": "pydantic", "pyarrow": "pyarrow", "pytest": "pytest", "hypothesis": "hypothesis",
                  "jsonschema": "jsonschema", "tomli": "tomli", "meterline": "meterline",
-                 "meterline_sim": "meterline-sim"}
+                 "meterline_sim": "meterline-sim", "meterline_gold": "meterline-gold"}
 
 
 def project(package):
@@ -85,7 +85,12 @@ def test_every_dependency_has_a_lower_bound(package):
 @pytest.mark.parametrize("package", [p for p in PACKAGES if p != "meterline"])
 def test_dependents_require_the_meterline_that_has_the_names_they_import(package):
     reqs = [r for r in project(package)["dependencies"] if requirement_name(r) == "meterline"]
-    assert reqs == ["meterline>=0.2"]
+    # meterline.run.data_folder_lock first shipped in meterline 0.3.0; a package whose source names it needs that
+    # version, and the other packages need only the 0.2 that has the v2 records
+    src = os.path.join(ROOT, "packages", package, "src")
+    uses_lock = any("data_folder_lock" in open(os.path.join(base, n), encoding="utf-8").read()
+                    for base, _dirs, files in os.walk(src) for n in files if n.endswith(".py"))
+    assert reqs == ["meterline>=0.3" if uses_lock else "meterline>=0.2"]
 
 
 def _imports(folder):
@@ -110,7 +115,7 @@ def _local_modules(folder):
 def test_every_third_party_import_is_declared(package):
     meta = project(package)
     own = package.replace("-", "_")
-    stdlib = set(sys.stdlib_module_names)
+    stdlib = set(sys.stdlib_module_names) | {"tomllib"}  # tomllib is stdlib from 3.11; a package on 3.10 declares tomli for it
     runtime = {requirement_name(r) for r in meta.get("dependencies", [])}
     extras = {requirement_name(r) for r in all_requirements(meta)}
     src = os.path.join(ROOT, "packages", package, "src")

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "meterline-anthropic-admin"
-version = "0.1.0"
+version = "0.1.1"
 description = "Reads the Anthropic Admin Usage and Cost API of a Console organisation and emits meterline records."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: System :: Monitoring",
 ]
 requires-python = ">=3.10"
-dependencies = ["meterline>=0.2", "httpx>=0.27"]
+dependencies = ["meterline>=0.3", "httpx>=0.27"]
 
 [project.urls]
 Homepage = "https://github.com/meyerx/meterline"

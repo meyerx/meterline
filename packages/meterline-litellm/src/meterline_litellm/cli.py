@@ -25,14 +25,18 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 from meterline import RunResult, note_failure, result_of_run, run_manifests
 from meterline.run import (
+    AUTO,
     EXIT_PERMANENT,
     EXIT_TRANSIENT,
     WritePhase,
+    data_folder_lock,
     exit_code_of_status,
+    final_through,
+    run_auto,
     unknown_fields_of,
     warn_unknown_fields,
 )
@@ -524,6 +528,18 @@ def run_rebuild(data_dir: Path, parquet: bool = False) -> int:
     return EXIT_OK
 
 
+
+def complete_through(data_dir: Union[str, Path]) -> Optional[date]:
+    """The last UTC day this connector has loaded as final in ``data_dir``, ``None`` before a first published backfill.
+
+    Read from the state file's ``days_loaded`` and the connector's own finality rule (``is_final_day``) at the pull of the
+    latest published run: the last day of the unbroken run of loaded days from the first one that is final then
+    (``meterline.run.final_through``, contract rule R19). No request, no lock; a damaged state file raises ``StateError``."""
+    state = _read_state(Path(data_dir))
+    if state is None:
+        return None
+    return final_through(data_dir, (date.fromisoformat(d) for d in state.get("days_loaded") or []), is_final_day)
+
 # ---- entry point --------------------------------------------------------------------------
 
 
@@ -556,6 +572,8 @@ def _build_parser() -> argparse.ArgumentParser:
     back.add_argument("--since", type=_parse_date, required=True, help="first day to load, YYYY-MM-DD")
     daily = sub.add_parser("daily", parents=[common, pull], help="every closed day since the last one loaded, and always the two days before today")
     daily.add_argument("--since", type=_parse_date, default=None, help="first day to load; needed only when there is no state file")
+    auto = sub.add_parser("auto", parents=[common, pull], help="backfill until a backfill has published, daily afterwards")
+    auto.add_argument("--since", type=_parse_date, required=True, help="first day of the backfill; ignored once one has published")
     sub.add_parser("rebuild", parents=[common], help="re-create records from the raw store; no API calls")
     return parser
 
@@ -567,6 +585,7 @@ def _utc_now() -> datetime:
 _OPTIONS = {
     "backfill": ("since", "parquet", "proxy_name", "rate_per_minute", "max_retry_after", "end_users"),
     "daily": ("since", "parquet", "proxy_name", "rate_per_minute", "max_retry_after", "end_users"),
+    "auto": ("since", "parquet", "proxy_name", "rate_per_minute", "max_retry_after", "end_users"),
     "rebuild": ("parquet",),
 }
 
@@ -595,9 +614,11 @@ def run(
 ) -> RunResult:
     """Run one command from Python and return its ``RunResult``; a failed run returns its exit code, it does not raise.
 
-    ``command`` is ``"backfill"``, ``"daily"`` or ``"rebuild"``. ``options`` are the command-line options under their
-    Python names, with the command-line defaults: ``since`` (a ``date`` or ``YYYY-MM-DD``; required for ``backfill``),
-    ``proxy_name`` (required for ``backfill`` and ``daily``), ``end_users``, ``rate_per_minute``, ``max_retry_after``
+    ``command`` is ``"backfill"``, ``"daily"``, ``"auto"`` or ``"rebuild"``; ``auto`` runs ``backfill`` until a backfill
+    has published in ``data_dir`` and ``daily`` afterwards (``meterline.run.auto_command``). ``options`` are the
+    command-line options under their Python names, with the command-line defaults: ``since`` (a ``date`` or
+    ``YYYY-MM-DD``; required for ``backfill``, and for ``auto``, which exits 2 without it), ``proxy_name`` (required for
+    ``backfill``, ``daily`` and ``auto``), ``end_users``, ``rate_per_minute``, ``max_retry_after``
     and ``parquet``; ``rebuild`` takes only ``parquet``. ``base_url`` also sets the proxy address and takes precedence
     over ``LITELLM_BASE_URL`` in ``credentials`` or the environment. An unknown option raises ``TypeError``.
 
@@ -616,16 +637,23 @@ def run(
     if unknown:
         raise TypeError("run(%r) got an unexpected option: %s" % (command, ", ".join(unknown)))
     data_path = Path(data_dir)
-    before = run_manifests(data_path)
     old_umask = os.umask(PRIVATE_UMASK)
     try:
-        code = _run_command(
-            command, data_path, credentials, transport, options,
-            clock=clock, sleep=sleep, now=now, jitter=jitter, wall=wall,
-        )
+        with data_folder_lock(data_path) as free:
+            if not free:
+                return RunResult(exit_code=EXIT_TRANSIENT)  # another run holds this data folder (contract rule R17)
+            before = run_manifests(data_path)
+
+            def run_one(chosen: str, given: Dict[str, Any]) -> int:
+                return _run_command(
+                    chosen, data_path, credentials, transport, given,
+                    clock=clock, sleep=sleep, now=now, jitter=jitter, wall=wall,
+                )
+
+            code = run_auto(data_path, options, run_one) if command == AUTO else run_one(command, options)
+            return result_of_run(data_path, code, before)
     finally:
         os.umask(old_umask)
-    return result_of_run(data_path, code, before)
 
 
 def _run_command(

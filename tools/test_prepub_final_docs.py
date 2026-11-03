@@ -331,7 +331,12 @@ def test_t3_10_no_rule_of_the_kit_checks_what_the_list_says_it_does_not():
     import inspect
     from meterline.conformance import RULES
     words = re.compile(r"\b(page|pages|paging|paged|final|is_final|window|windows|sum|sums|summing|summed|re-read|reread)\b")
+    body = flat(section(read(*CONTRACT), "What is not checked by a test"))
     for rule in RULES:
+        if rule.id == "R19":
+            # complete_through is about finality: R19 reads the connector's own is_final as given, and the list says so
+            assert "R19 takes the connector's own rule as given (`Connector.is_final`)" in body
+            continue
         described = "%s %s" % (rule.title, inspect.getdoc(rule.check) or "")
         assert not words.search(described.lower()), "%s now mentions %r: update the list of what the kit does not check" % (
             rule.id, words.search(described.lower()).group(0))

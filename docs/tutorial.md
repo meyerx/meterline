@@ -26,7 +26,7 @@ python3 -m venv .venv
 The install takes a minute or two. The last line names what was installed, among them:
 
 ```text
-Successfully installed ... meterline-0.2.0 meterline-gold-0.1.0 meterline-sim-0.1.0 ...
+Successfully installed ... meterline-0.3.0 meterline-gold-0.1.0 meterline-sim-0.1.0 ...
 ```
 
 The list of dependencies around them depends on what your environment already had.

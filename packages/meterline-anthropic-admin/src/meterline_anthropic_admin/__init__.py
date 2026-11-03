@@ -10,9 +10,9 @@ except _NotInstalled:  # a source tree that is not installed
 # after __version__: client.py reads it
 from meterline import RunResult  # noqa: E402
 
-from .cli import run  # noqa: E402
+from .cli import complete_through, run  # noqa: E402
 from .client import ApiError, PaginationError  # noqa: E402
 
 # The public interface is the command line, ``run`` and its ``RunResult``, the error classes below, the records the
 # commands write (README, "Public interface") and the documented ``testing`` module; every other module is internal.
-__all__ = ["ApiError", "PaginationError", "RunResult", "__version__", "run"]
+__all__ = ["ApiError", "PaginationError", "RunResult", "__version__", "complete_through", "run"]

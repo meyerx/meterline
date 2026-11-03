@@ -15,6 +15,7 @@ yaml = pytest.importorskip("yaml")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wiring  # noqa: E402  the places a package must be named in; tools/check_new_connector.py lists them
+from package_list import in_working_repo  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGES = sorted(d for d in os.listdir(os.path.join(ROOT, "packages"))
@@ -85,7 +86,9 @@ def test_release_builds_checks_attests_and_records_an_sbom():
 
 
 def test_dependabot_watches_the_actions_and_every_package():
-    data = yaml.safe_load(read(".github", "dependabot.yml"))
+    if not os.path.exists(os.path.join(ROOT, ".github", "dependabot.yml")) and not in_working_repo():
+        pytest.skip("the dependency-update file is not part of the public repository (the export leaves it out)")
+    data =yaml.safe_load(read(".github", "dependabot.yml"))
     assert data["version"] == 2
     by_ecosystem = {u["package-ecosystem"]: u for u in data["updates"]}
     assert by_ecosystem["github-actions"]["directory"] == "/"
@@ -150,3 +153,17 @@ def test_the_changelog_has_a_version_entry_template():
     template = section.split("CHANGELOG entry", 1)[1]
     for part in ("## [", "### Added", "### Changed", "### Fixed", "### Known limits"):
         assert part in template, part
+
+
+def test_the_release_build_refuses_a_tag_whose_commit_is_not_on_main():
+    # M-22: versions and the changelog change only through a pull request merged into main
+    build = workflow("release.yml")["jobs"]["build"]["steps"]
+    checkout = build[0]
+    assert checkout["uses"].startswith("actions/checkout@") and checkout["with"]["fetch-depth"] == 0
+    check = [s for s in build if 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in s.get("run", "")]
+    assert len(check) == 1 and build.index(check[0]) < build.index([s for s in build if s.get("id") == "tag"][0])
+    assert "set -euo pipefail" in check[0]["run"] and "exit 1" in check[0]["run"]
+
+
+def test_release_yml_accepts_the_job_package():
+    assert "meterline-job" in wiring.release_case(ROOT)

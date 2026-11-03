@@ -328,7 +328,7 @@ Retired names: before the first public release `record_version` 2 was redefined,
 - Before 1.0.0 (every package today: no package is at 1.0.0 yet), a breaking change raises the minor version (0.2.0 to 0.3.0) and a patch release never breaks anything. From 1.0.0, which a package takes once a connector has run against a live account, a breaking change raises the major version.
 - A new `record_version` is a breaking change of `meterline`.
 - Deprecation: a public name, option or field that is to go is first marked deprecated (a `DeprecationWarning` when it is used, and a line in `CHANGELOG.md`) and keeps working for at least one more minor release. It is removed at the earliest in the release after that.
-- Each package that depends on `meterline` declares the lowest `meterline` version that has every name it imports (`meterline>=0.2` today); a CI job installs the lowest declared versions and runs the tests.
+- Each package that depends on `meterline` declares the lowest `meterline` version that has every name it imports (`meterline>=0.3` for the packages that take the data-folder lock, `meterline>=0.2` for the others today). A CI job installs the lowest declared versions, once editable to run the tests and once from the built wheels to import every module.
 
 ## v1 lines
 

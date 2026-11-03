@@ -1,14 +1,20 @@
-# The daily job: run each connector, then build gold. Copy this file, edit it, and keep keys OUT of it:
+# The daily job: run each connector, stage silver, build gold, then publish: meterline-job run job.toml. Copy this file, edit it, and keep keys OUT of it:
 # every connector reads its key from its documented environment variable (see the connector README).
 
 data_root = "job-data"          # each connector keeps its own folder here: <data_root>/<name>
-gold_root = "job-data/gold"     # one gold folder per day: <gold_root>/<YYYY-MM-DD>
+gold_root = "job-data/gold"     # builds/<YYYY-MM-DD>[-n] (one per run), frozen/<YYYY-MM>, published -> the folder to serve
 
 [gold]
 org = "org"                     # the organisation files (people.csv, units.csv, ...)
 policy = "policy.yaml"
 prices = "prices.yaml"
+parquet = true                  # write the Parquet twins of the CSV files (default true)
+# invoice = "invoice.csv"       # optional: the provider invoice, to reconcile with
 # the hashing key is read from METERLINE_GOLD_KEY
+
+[publish]                       # optional; the values shown are the defaults
+freeze_after_days = 4           # a month is frozen once every source has final data for it and this many days have passed
+freeze_cap_extra_days = 10      # at the latest this many days later it is frozen from the latest build whatever the sources say
 
 [[connector]]
 name = "claude"

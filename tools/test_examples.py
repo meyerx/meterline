@@ -1,7 +1,7 @@
 """B5: the examples run in CI on simulated data and recorded shapes, and the export ships them.
 
 Each example folder has a README with goal, commands, expected output and what it reads; examples 01 and 02 are run here
-on a build of the ``tiny`` preset; example 03 has its own test (examples/03-daily-job/test_job.py), which CI runs; the
+on a build of the ``tiny`` preset; example 03 runs the meterline-job package, whose tests (packages/meterline-job/tests) CI runs; the
 CI job runs the "Run it" block of every example README.
 
 Run: python3 -m pytest -q tools/test_examples.py

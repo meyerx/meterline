@@ -21,8 +21,8 @@ provider's own.
     from @@PKG@@.testing import FakeAPI
 
     fake = FakeAPI()
-    result = run("backfill", since=date(2026, 9, 1), data_dir="out", credentials={"@@ENV@@": fake.api_key},
-                 transport=fake.transport)
+    result = run("backfill", since=date(2026, 9, 1), provider_account_id="org-one", data_dir="out",
+                 credentials={"@@ENV@@": fake.api_key}, transport=fake.transport)
 
 What it does not prove: that a live API accepts your key, answers in this shape or rate-limits like this.
 """

@@ -77,4 +77,4 @@ def test_done_check_G19_cli_exit_codes(tmp_path, monkeypatch, capsys):
     assert cli.main(_args(inp, out3)) == 1
     assert not out3.exists()
     assert not Path(str(out3) + ".tmp").exists()
-    assert meterline_gold.__version__ == "0.1.0"
+    assert meterline_gold.__version__ == "0.2.0"

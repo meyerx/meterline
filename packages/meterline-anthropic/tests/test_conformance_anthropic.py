@@ -5,7 +5,8 @@ from datetime import date
 import pytest
 
 from meterline.conformance import RULES, Connector, check
-from meterline_anthropic import run
+from meterline_anthropic import complete_through, run
+from meterline_anthropic.normalise import is_final_period
 from meterline_anthropic.testing import FakeAPI
 
 ENDPOINTS = ("user_usage_report", "user_cost_report", "usage_report", "cost_report", "users", "summaries")
@@ -35,6 +36,8 @@ CONNECTOR = Connector(
     fail=_fail,
     bad_options={"rate_per_minute": 0},
     duplicate=_duplicate,
+    complete_through=complete_through,
+    is_final=is_final_period,  # a period is final once its month ended more than 7 days before the pull
 )
 
 
