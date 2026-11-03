@@ -1,16 +1,27 @@
-"""CI runs on the self-hosted runner while the repository variable CI_RUNNER is set, and on GitHub's hosted
-runner when it is not. release.yml publishes to PyPI and always stays GitHub-hosted.
+"""CI runs on the runner the repository variable CI_RUNNER names while it is set, and on GitHub's hosted runner when
+it is not. The weekly and manual runs, the long ones, run on the runner CI_RUNNER_HEAVY names when that is set, so
+they can use the self-hosted runner while pull requests use hosted minutes. release.yml publishes to PyPI and always
+stays GitHub-hosted.
 
 Run: python3 -m pytest -q tools
 """
 import os
+import sys
 
 import pytest
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from package_list import in_working_repo  # noqa: E402
+
 yaml = pytest.importorskip("yaml")
 
+# The export rewrites these workflows for the public repository: every runner becomes ubuntu-latest and the self-hosted
+# steps are dropped (export_public.public_workflow), so the switch below exists only in the working repository.
+pytestmark = pytest.mark.skipif(not in_working_repo(), reason="the public tree has no runner switch (the export removes it)")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SWITCH = "${{ vars.CI_RUNNER || 'ubuntu-latest' }}"
+SWITCH = ("${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && vars.CI_RUNNER_HEAVY"
+          " || vars.CI_RUNNER || 'ubuntu-latest' }}")
 
 
 def jobs(name):

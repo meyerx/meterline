@@ -265,16 +265,32 @@ def write_csv(path, header, rows):
 
 
 def write_parquet(path, name, columns, rows, schema_name=None):
+    header, formatted = format_rows(name, columns, rows, schema_name)
+    _parquet_file(path, name, SCHEMAS[schema_name or name], formatted)
+
+
+def write_parquet_text(path, schema_name, header, rows):
+    """Write the Parquet twin of a CSV file from its text: ``header`` and ``rows`` as read from the CSV (schema_version
+    first, every cell a string, an empty cell for null). The types are the ones ``write_parquet`` gives (bool and date as
+    strings, count int64, money, quantity and ratio decimal128(38,12)); ``schema_name`` is a key of ``SCHEMAS``.
+
+    ``meterline-job`` uses it for the files of its published folder that mix frozen rows with rows of the latest build.
+    Raises ValueError when ``header`` is not the schema's."""
+    schema = SCHEMAS[schema_name]
+    if list(header) != ["schema_version"] + [c for c, _ in schema]:
+        raise ValueError("%s: the header is %s, the schema is %s" % (schema_name, list(header), [c for c, _ in schema]))
+    _parquet_file(path, schema_name, schema, [list(r) for r in rows])
+
+
+def _parquet_file(path, name, schema, formatted):
     try:
         import pyarrow as pa
         import pyarrow.parquet as pq
     except ImportError as exc:
         raise InputError("--parquet needs pyarrow; install the 'parquet' extra (%s)" % exc) from exc
-    schema = SCHEMAS[schema_name or name]
-    header, formatted = format_rows(name, columns, rows, schema_name)
-    kinds = [k for _, k in schema]
-    fields, arrays = [pa.field("schema_version", pa.string())], [pa.array([GOLD_SCHEMA_VERSION] * len(rows), pa.string())]
-    for i, ((col, kind), _) in enumerate(zip(schema, kinds, strict=True)):
+    fields = [pa.field("schema_version", pa.string())]
+    arrays = [pa.array([r[0] for r in formatted], pa.string())]
+    for i, (col, kind) in enumerate(schema):
         values = [r[i + 1] for r in formatted]
         if name == "data_quality" or kind in ("text", "ntext", "nx", "date", "json", "map_money", "map_count", "dq",
                                               "bool"):

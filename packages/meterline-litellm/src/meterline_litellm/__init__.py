@@ -9,10 +9,10 @@ except _NotInstalled:  # a source tree that is not installed
 
 from meterline import RunResult
 
-from .cli import run
+from .cli import complete_through, run
 from .client import ApiError, PaginationError
 from .fetch import PathNotFound
 
 # The public interface is the command line, ``run``, the records it writes and the documented ``testing`` module
 # (README, "Public interface"); every other module of this package is internal.
-__all__ = ["ApiError", "PaginationError", "PathNotFound", "RunResult", "run", "__version__"]
+__all__ = ["ApiError", "PaginationError", "PathNotFound", "RunResult", "complete_through", "run", "__version__"]

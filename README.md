@@ -58,6 +58,7 @@ The data moves through three layers, shown in [`docs/architecture.md`](docs/arch
 | [`packages/meterline-copilot`](packages/meterline-copilot/README.md) | A connector for GitHub Copilot usage reports, billing and seats (organization or enterprise level), with a `meterline-copilot` command. | `httpx` |
 | [`packages/meterline-sim`](packages/meterline-sim/README.md) | A generator: an invented organisation and its AI usage (Claude Enterprise, GitHub Copilot, LiteLLM) as silver records, organisation files and a ground truth, with a `meterline-sim` command. | none |
 | [`packages/meterline-gold`](packages/meterline-gold/README.md) | Per-person, per-group and per-audience datasets (central, manager, person, exec) from silver, organisation files, a price list and a policy file, with group-size suppression, shadow scenarios, alert events and a static example dashboard, and a `meterline-gold` command (all 3 phases). | none |
+| [`packages/meterline-job`](packages/meterline-job/README.md) | The daily job as a command: runs the connectors, stages silver and builds gold, one JSON status line per step and an exit code per kind of failure. | none (calls the connectors and gold) |
 
 Further providers come as sibling packages on the same record format; see [Adding a provider](#adding-a-provider).
 
@@ -68,11 +69,11 @@ Needs Python 3.10 or later. This installs every package in editable mode (the An
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e packages/meterline -e "packages/meterline-anthropic[dev,parquet]" -e "packages/meterline-anthropic-admin[dev]" -e packages/meterline-litellm -e packages/meterline-copilot -e "packages/meterline-sim[dev]" -e "packages/meterline-gold[dev]"
+.venv/bin/python -m pip install -e packages/meterline -e "packages/meterline-anthropic[dev,parquet]" -e "packages/meterline-anthropic-admin[dev]" -e packages/meterline-litellm -e packages/meterline-copilot -e "packages/meterline-sim[dev]" -e "packages/meterline-gold[dev]" -e "packages/meterline-job[dev]"
 .venv/bin/python -m pytest -q packages
 ```
 
-The install takes a few minutes and the test run about twenty (the simulator's property tests are most of it). A healthy run prints a growing line of dots and ends with `passed` in the last line, with no `failed` or `error`. Two tests assert a wall-clock bound (`S14` in the simulator, `G21` in gold). `G21` is skipped when the environment variable `CI` is set, as it is on the CI runners, and `S14` runs there too. On a heavily loaded machine they can fail alone, so rerun them by name before suspecting anything else (unset `CI` to run `G21`).
+The install takes a few minutes and the test run about twenty (the simulator's property tests are most of it). A healthy run prints a growing line of dots and ends with `passed` in the last line, with no `failed` or `error`. Two tests assert a wall-clock bound (`S14` in the simulator, `G21` in gold). Both are skipped when the environment variable `CI` is set, as it is on the CI runners. On a heavily loaded machine they can fail alone, so rerun them by name before suspecting anything else (unset `CI` to run them).
 
 ### Try it without a key
 
@@ -163,6 +164,7 @@ packages/meterline-litellm/         LiteLLM connector, CLI, tests (fake proxy, s
 packages/meterline-copilot/         GitHub Copilot connector, CLI, tests (fake GitHub API, synthetic rows)
 packages/meterline-sim/             simulated organisation and usage generator, CLI, presets, price table, tests
 packages/meterline-gold/            per-person, per-group and per-audience datasets from silver, CLI, example dashboard, tests
+packages/meterline-job/             the daily job: connectors, silver, gold; CLI, tests (fake APIs, synthetic rows)
 examples/                           three runnable examples on simulated data: FinOps KPIs, a static exec report, the daily job
 docs/
   README.md                                     the index by goal: simulated data, a real account, a dashboard, a new provider

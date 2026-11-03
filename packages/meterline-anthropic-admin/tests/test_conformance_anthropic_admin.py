@@ -3,7 +3,8 @@
 import pytest
 
 from meterline.conformance import RULES, Connector, check
-from meterline_anthropic_admin import run
+from meterline_anthropic_admin import complete_through, run
+from meterline_anthropic_admin.normalise import is_final_day
 from meterline_anthropic_admin.testing import COST_PATH, USAGE_PATH, FakeAPI
 
 
@@ -28,6 +29,8 @@ CONNECTOR = Connector(
     fail=_fail,
     bad_options={"rate_per_minute": 0},
     duplicate=_duplicate,
+    complete_through=complete_through,
+    is_final=is_final_day,
 )
 
 

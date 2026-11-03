@@ -5,7 +5,8 @@ from datetime import date
 import pytest
 
 from meterline.conformance import RULES, Connector, check
-from @@PKG@@ import run
+from @@PKG@@ import complete_through, run
+from @@PKG@@.normalise import is_final
 from @@PKG@@.testing import FakeAPI
 
 OPTIONS = {"provider_account_id": "org-one"}
@@ -28,9 +29,31 @@ CONNECTOR = Connector(
     fail=lambda fake, status, times: fake.fail("", status, times=times),
     bad_options={"rate_per_minute": 0},
     duplicate=_duplicate,
+    complete_through=complete_through,
+    is_final=is_final,
 )
 
 
 @pytest.mark.parametrize("rule", RULES, ids=lambda rule: rule.id)
 def test_the_connector_keeps_the_contract(rule, tmp_path):
     check(rule, CONNECTOR, tmp_path)
+
+
+def test_the_run_manifest_round_trips_requested(tmp_path):
+    """``requested`` ("auto" when auto chose the command) is written and read back; an older manifest without it reads as None."""
+    import json
+    from datetime import datetime, timezone
+
+    from meterline.run import requested
+
+    from @@PKG@@.fetch import RunManifest
+
+    pulled_at = datetime(2026, 9, 15, 6, 0, tzinfo=timezone.utc)
+    with requested("auto"):
+        made = RunManifest("backfill", "20260915T060000Z", pulled_at, "org-one")
+    path = made.write(tmp_path)
+    assert RunManifest.read(path).requested == "auto" and RunManifest.read(path) == made
+    old = json.loads(path.read_text(encoding="utf-8"))
+    del old["requested"]
+    path.write_text(json.dumps(old), encoding="utf-8")
+    assert RunManifest.read(path).requested is None

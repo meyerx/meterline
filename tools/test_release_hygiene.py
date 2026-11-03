@@ -258,16 +258,16 @@ def test_releasing_doc_names_the_stop_conditions_and_the_time_buffer():
     assert "stop" in _section(doc, "pre-mortem") and "buffer" in doc
 
 
-def test_quickstart_skips_only_the_readme_suite_line_on_push():
+def test_quickstart_runs_the_whole_readme_block_on_the_weekly_and_manual_runs_only():
     suite_line = ".venv/bin/python -m pytest -q packages"
     block_lines = _block("Quick start").splitlines()
     assert block_lines.count(suite_line) == 1
     ci = read(".github", "workflows", "ci.yml")
     job = ci.split("\n  quickstart:", 1)[1].split("\n  audit:", 1)[0]
-    # the job names the exact line it removes, and fails unless it finds it exactly once
-    assert suite_line in job
-    assert "EVENT_NAME: ${{ github.event_name }}" in job
-    assert "schedule" in job and "workflow_dispatch" in job
+    assert "if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'" in job
+    # the block runs as the README writes it: nothing is filtered out of it
+    assert 'bash -euxo pipefail "$RUNNER_TEMP/quick-start.sh"' in job
+    assert "grep -v" not in job
 
 
 # ---- MF-6: the history scans, the gitleaks version, the first-hour list, the name of the repository ----

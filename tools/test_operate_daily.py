@@ -11,7 +11,7 @@ from package_list import ROOT, connectors  # noqa: E402
 from wiring import BY_ID  # noqa: E402  the places a package must be named in, shared with tools/check_new_connector.py
 
 PAGE = os.path.join(ROOT, "docs", "how-to", "operate-daily.md")
-JOB = os.path.join(ROOT, "examples", "03-daily-job", "job.py")
+JOB = os.path.join(ROOT, "packages", "meterline-job", "src", "meterline_job", "job.py")
 
 
 def read(path):

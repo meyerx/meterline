@@ -5,14 +5,23 @@ Every connector writes ``runs/<batch_id>.json`` under its data directory for a r
 run that wrote nothing never reports the manifest of an earlier one.
 """
 
+import contextlib
+import contextvars
 import json
+import os
 import sys
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, FrozenSet, Iterable, Iterator, List, Optional, Tuple, Type, Union
 
 from meterline.http import failure_kind_of_status
+
+try:
+    import fcntl
+except ImportError:  # no flock on this platform (Windows): the lock is skipped, with one warning
+    fcntl = None  # type: ignore[assignment]
 
 EXIT_OK = 0
 EXIT_TRANSIENT = 1  # a 5xx, a 429 after the retries, a timeout or a connection error: run again later
@@ -24,6 +33,8 @@ _KIND_OF_EXIT = {EXIT_OK: "none", EXIT_TRANSIENT: "transient", EXIT_CHECKS: "inp
 _EXIT_OF_KIND = {"transient": EXIT_TRANSIENT, "permanent": EXIT_PERMANENT}
 
 _noted_status: Optional[int] = None
+_warned_no_fcntl = False
+LOCK_NAME = ".lock"
 
 
 def exit_code_of_status(status: int) -> int:
@@ -99,6 +110,162 @@ def result_of_run(data_dir: Union[str, Path], exit_code: int, before: FrozenSet[
         http_status=manifest.get("http_status", status),
         unknown_fields=tuple(manifest.get("unknown_fields") or ()),
     )
+
+
+# ---- one run per data folder ----------------------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def file_lock(path: Union[str, Path], what: str = "data folder") -> Iterator[bool]:
+    """An exclusive, non-blocking ``flock`` on the file ``path``, held for the length of the ``with`` block.
+
+    Yields ``True`` when the caller holds the lock and ``False`` when another open file holds it: the message
+    ``transient: <what> is in use by another run`` then goes to stderr and the caller must stop and write nothing. The
+    operating system releases the lock when the process ends, whatever the way. The file is made 0600 in a 0700 folder.
+    Without ``fcntl`` the lock is skipped (``True``) with one warning per process; a lock file that cannot be made is a
+    warning too, and the run goes on without the lock."""
+    global _warned_no_fcntl
+    if fcntl is None:
+        if not _warned_no_fcntl:
+            _warned_no_fcntl = True
+            print("warning: file locking (fcntl) is not available on this platform; the %s is not locked, so two runs "
+                  "at the same time are not prevented." % what, file=sys.stderr)
+        yield True
+        return
+    lock_path = Path(path)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        handle = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
+    except OSError as exc:
+        print("warning: cannot make the lock file %s (%s); running without the lock." % (lock_path.name, exc.strerror or type(exc).__name__),
+              file=sys.stderr)
+        yield True
+        return
+    try:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:  # EWOULDBLOCK: held by another open file
+            print("transient: %s is in use by another run; nothing was done. Run the same command again later." % what, file=sys.stderr)
+            yield False
+            return
+        yield True
+    finally:
+        os.close(handle)  # closing the file releases the lock
+
+
+def data_folder_lock(data_dir: Union[str, Path]) -> "contextlib.AbstractContextManager[bool]":
+    """The lock of one connector data folder: ``file_lock`` on ``<data_dir>/runs/.lock``.
+
+    It sits inside ``runs/`` so a data folder still holds exactly ``raw``, ``records``, ``runs`` and ``state.json``. Every
+    connector's ``run`` takes it first (contract rule R17); ``rebuild``, the silver copy and the export scan ignore the file."""
+    return file_lock(Path(data_dir) / "runs" / LOCK_NAME, "data folder")
+
+
+# ---- auto: backfill until one has published, daily afterwards --------------------------------------------------------
+
+AUTO = "auto"
+_requested: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("meterline_requested", default=None)
+
+
+def _published_manifests(data_dir: Union[str, Path]) -> Iterator[Dict[str, Any]]:
+    """Every run manifest under ``data_dir/runs`` whose ``status`` is ``published``; one that cannot be read is passed over."""
+    runs = Path(data_dir) / "runs"
+    for path in sorted(runs.glob("*.json")) if runs.is_dir() else []:
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(manifest, dict) and manifest.get("status") == "published":
+            yield manifest
+
+
+def auto_command(data_dir: Union[str, Path]) -> str:
+    """What ``auto`` runs in ``data_dir``: ``"backfill"`` until a backfill has published, ``"daily"`` afterwards.
+
+    A backfill has published when a file under ``runs/`` says ``"command": "backfill"`` and ``"status": "published"``.
+    ``state.json`` does not say it: a backfill that stopped half way writes one too, and the next ``auto`` must resume
+    that backfill. A published ``daily`` is not a backfill either (contract rule R18)."""
+    return "daily" if any(m.get("command") == "backfill" for m in _published_manifests(data_dir)) else "backfill"
+
+
+def resolve_auto(data_dir: Union[str, Path], since: Any) -> Optional[str]:
+    """For ``run("auto", ...)``: the command to run in its place, or ``None`` when ``since`` is missing.
+
+    ``None`` comes with a message on stderr and the connector returns exit 2 (input): ``auto`` needs ``since`` in case
+    it backfills. On the daily path ``since`` is not used, and the message says so. Call it under the data folder lock."""
+    if since is None:
+        print("auto needs --since YYYY-MM-DD: it is the first day of the backfill that auto runs until one has published. "
+              "Nothing was done.", file=sys.stderr)
+        return None
+    chosen = auto_command(data_dir)
+    if chosen == "daily":
+        print("note: auto runs daily, because a backfill has published in this data folder; --since is ignored",
+              file=sys.stderr)
+    return chosen
+
+
+def run_auto(data_dir: Union[str, Path], options: Dict[str, Any], run_one: Callable[[str, Dict[str, Any]], int]) -> int:
+    """What a connector's ``run`` does for ``auto``, under its data folder lock; returns the exit code.
+
+    ``run_one(command, options)`` runs ``backfill`` or ``daily`` as the connector always does. ``auto`` without ``since``
+    is exit 2 before anything runs; on the daily path ``since`` is left out of the options. The run manifest of the
+    chosen command records ``"command"`` (what ran) and ``"requested": "auto"``."""
+    chosen = resolve_auto(data_dir, options.get("since"))
+    if chosen is None:
+        return EXIT_CHECKS
+    given = {k: v for k, v in options.items() if not (chosen == "daily" and k == "since")}
+    with requested(AUTO):
+        return run_one(chosen, given)
+
+
+def last_published_pull(data_dir: Union[str, Path]) -> Optional[datetime]:
+    """The ``pulled_at`` of the latest published run under ``data_dir`` (UTC), ``None`` when no run has published."""
+    stamps = []
+    for manifest in _published_manifests(data_dir):
+        try:
+            stamps.append(datetime.fromisoformat(str(manifest["pulled_at"]).replace("Z", "+00:00")).astimezone(timezone.utc))
+        except (KeyError, ValueError):
+            continue
+    return max(stamps) if stamps else None
+
+
+def final_through(data_dir: Union[str, Path], loaded: Iterable[date], is_final: Callable[[date, datetime], bool]) -> Optional[date]:
+    """What a connector's ``complete_through`` returns: the last UTC day it holds as final, ``None`` when there is none.
+
+    ``loaded`` are the days its state file lists as loaded and ``is_final(day, pulled_at)`` its own finality rule. The
+    answer is the last day of the unbroken run of loaded days that starts at the first one and is final at the pull of
+    the latest published run: a day that is loaded but not yet final (the provider may still revise it), a day not
+    loaded, or a gap ends it. ``None`` before a backfill has published (``auto_command`` still says ``backfill``), and
+    when the first loaded day is not final yet (contract rule R19)."""
+    if auto_command(data_dir) == "backfill":
+        return None
+    pulled_at = last_published_pull(data_dir)
+    days = set(loaded)
+    if pulled_at is None or not days:
+        return None
+    day, last = min(days), None
+    while day in days and is_final(day, pulled_at):
+        last, day = day, day + timedelta(days=1)
+    return last
+
+
+@contextlib.contextmanager
+def requested(command: Optional[str]) -> Iterator[None]:
+    """Within the block, ``requested_command()`` returns ``command``: a connector wraps the run of the command that
+    ``auto`` chose in ``with requested("auto"):`` so the run manifest it writes records ``"requested": "auto"``."""
+    token = _requested.set(command)
+    try:
+        yield
+    finally:
+        _requested.reset(token)
+
+
+def requested_command() -> Optional[str]:
+    """The command the caller asked for when it differs from the one run (``"auto"``), else ``None``.
+
+    The default of every connector's ``RunManifest.requested``: a manifest made outside ``requested(...)`` (a plain
+    ``backfill``, ``daily``, or one read back from a file without the field) holds ``None``."""
+    return _requested.get()
 
 
 # ---- fields a normaliser does not know -------------------------------------------------------------------------------

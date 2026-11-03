@@ -4,11 +4,11 @@ from importlib.metadata import PackageNotFoundError as _NotInstalled, version as
 
 from meterline import RunResult
 
-from .cli import run
+from .cli import complete_through, run
 
 try:
     __version__ = _version("@@DIST@@")  # the one source is pyproject.toml
 except _NotInstalled:  # a source tree that is not installed
     __version__ = "0+unknown"
 
-__all__ = ["RunResult", "run", "__version__"]
+__all__ = ["RunResult", "complete_through", "run", "__version__"]

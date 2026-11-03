@@ -2,7 +2,9 @@
 """Build the public tree of meterline from a git ref, scan it, and commit it as one squashed commit.
 
     python3 tools/export_public.py --out /path/to/new-dir --denylist /path/to/terms.txt [--ref origin/main]
-    python3 tools/export_public.py --scan-history --denylist /path/to/terms.txt [--repo .]
+    python3 tools/export_public.py --scan-history --denylist /path/to/terms.txt [--repo .] [--since export/v0.1]
+    python3 tools/export_public.py --onto /path/to/clone-of-public --tag export/v0.2 --denylist /path/to/terms.txt \\
+        --author-name NAME --author-email EMAIL [--allow-divergence]
 
 The tree is built from an allowlist (INCLUDE below), taken from committed files only, so nothing from a
 working directory leaks in. Files outside the allowlist (the session rules file, the backlog, this tool)
@@ -37,6 +39,21 @@ file: a gzip file once), and prints the kind and the commit id of each hit,
 never a term. It exits 1 on a hit. The export scan above reads one tree, so it cannot see a term that only a commit
 message or a deleted file ever held; this is the check for a route that would publish the working history.
 
+--since REF (only with --scan-history) scans only the commits that are reachable from a ref but not from REF, so a later
+release gate covers what the previous export tag does not.
+
+Each public version after the first is a tag `export/vX.Y` on a private commit. --tag NAME checks that the tag exists in
+--repo and names the same commit as --ref (--ref defaults to the tag), and ends the commit message with one
+`Export-Tag: NAME` line; the first version is exported with it too, so later versions can start from it. --onto CLONE
+(with --tag, --author-name and --author-email) makes the export one new commit on top of the history of CLONE, a clone of the
+public repository: on a new branch named after the tag, which must not exist yet, with nothing pushed. CLONE must be on a
+branch with no uncommitted change. The same scans run first. The run then compares the HEAD of CLONE with its last
+export commit (the first commit of `git log HEAD` with an `Export-Tag:` trailer). For each path that the public side changed
+since then, the new export must equal what the public repository now holds, which is so once the change has been ported back
+to the private repository; otherwise the run lists the paths and stops, because the new commit would silently undo that
+change. --allow-divergence overrides it with a warning that lists exactly those paths. Every refusal comes before anything
+is written to CLONE.
+
 Nothing is pushed and no remote is set. The owner creates the public repository and pushes.
 """
 import argparse
@@ -48,18 +65,29 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import uuid
 
 INCLUDE = [".gitignore", "README.md", "AGENTS.md", "llms.txt", "examples", "LICENSE", "SECURITY.md", "CONTRIBUTING.md", "CHANGELOG.md", "pytest.ini", "ruff.toml", ".gitleaks.toml", ".github", "docs", "packages", "tools"]
 
 # Left out of the export even though their directory is allowlisted (tests that read private files).
 EXCLUDE = ["tools/test_private_rules.py", "tools/test_commit_messages.py",
+           # dependency-update configuration of the working repository only
+           ".github/dependabot.yml",
+           # the owner's issue-to-pull-request route (a workflow and its issue form) runs on the working repository only
+           ".github/workflows/claude.yml", ".github/ISSUE_TEMPLATE/task.yml",
            # the build contract of the integration base: it names backlog rows and the private process that decided it
            "docs/dev/meterline-integration-base-SPEC-v1.0-2026-10-29.md",
            # the build contract of improvements round 1: the same reason
            "docs/dev/meterline-improvements-1-SPEC-v1.0-2026-10-29.md",
            # the build contract of improvements round 2: the same reason
-           "docs/dev/meterline-improvements-2-SPEC-v1.0-2026-10-30.md"]
+           "docs/dev/meterline-improvements-2-SPEC-v1.0-2026-10-30.md",
+           # the build contract of the job package and the folder lock (job 1a): the same reason
+           "docs/dev/meterline-job-1a-SPEC-v1.0-2026-10-31.md",
+           # the build contract of auto and complete_through (auto 1b): the same reason
+           "docs/dev/meterline-auto-1b-SPEC-v1.0-2026-10-31.md",
+           # the build contract of dated builds, frozen months and the published folder (publish 1c): the same reason
+           "docs/dev/meterline-publish-1c-SPEC-v1.0-2026-10-31.md"]
 
 MIN_GITLEAKS = (8, 30, 0)  # older gitleaks ignores [[allowlists]] in .gitleaks.toml and reports false hits
 DEV = "docs/dev/"
@@ -121,7 +149,59 @@ def export_tree(repo, ref, out):
                     fh.write(tar.extractfile(m).read())
     prune_dev(out)
     strip_front_matter_keys(out)
+    rewrite_workflows(out)
     return paths
+
+
+OMIT_BEGIN, OMIT_END = "# export:omit-begin", "# export:omit-end"
+RUNNER_SWITCH = re.compile(r"^(\s*runs-on:)\s*\$\{\{.*\bCI_RUNNER\b.*\}\}\s*$")
+SELF_HOSTED_IF = re.compile(r"^\s+if: runner\.environment == 'self-hosted'\s*$")
+HOSTED_IF = re.compile(r"^\s+if: runner\.environment == 'github-hosted'\s*$")
+
+
+def public_workflow(text):
+    """A workflow of the working repository, as the public repository gets it: no self-hosted runner and no runner variable.
+
+    Every `runs-on` that reads a CI_RUNNER variable becomes `ubuntu-latest`; a step that runs only on a self-hosted runner is
+    dropped, and so is the `if` that keeps a step to the hosted ones; the comment lines between `# export:omit-begin` and
+    `# export:omit-end` are dropped with the two marker lines. A marker without its partner stops the export."""
+    lines, kept, omitting = text.split("\n"), [], False
+    for line in lines:
+        if line.strip() == OMIT_BEGIN or line.strip() == OMIT_END:
+            if omitting == (line.strip() == OMIT_BEGIN):
+                raise SystemExit("workflow comment markers %s / %s do not pair up" % (OMIT_BEGIN, OMIT_END))
+            omitting = not omitting
+        elif not omitting and not HOSTED_IF.match(line):
+            kept.append(RUNNER_SWITCH.sub(r"\1 ubuntu-latest", line))
+    if omitting:
+        raise SystemExit("workflow comment marker %s has no %s" % (OMIT_BEGIN, OMIT_END))
+    out, i = [], 0
+    while i < len(kept):
+        step = re.match(r"^(\s*)- ", kept[i])
+        if not step:
+            out.append(kept[i])
+            i += 1
+            continue
+        end = i + 1  # the step ends at the next line that is not indented deeper than its dash
+        while end < len(kept) and (not kept[end].strip() or len(kept[end]) - len(kept[end].lstrip()) > len(step.group(1))):
+            end += 1
+        core = end
+        while core > i + 1 and not kept[core - 1].strip():  # blank lines after a step belong to what follows
+            core -= 1
+        out.extend(kept[core:end] if any(SELF_HOSTED_IF.match(b) for b in kept[i:core]) else kept[i:end])
+        i = end
+    return "\n".join(out)
+
+
+def rewrite_workflows(root):
+    folder = os.path.join(root, ".github", "workflows")
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.endswith((".yml", ".yaml")):
+            path = os.path.join(folder, name)
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(public_workflow(text))
 
 
 def strip_process_keys(text):
@@ -309,17 +389,18 @@ def run_gitleaks(out):
     return subprocess.run([exe, "dir", "--no-banner", "--redact", out]).returncode == 0
 
 
-def scan_history(repo, terms):
+def scan_history(repo, terms, since=None):
     """Hits (kind, commit id, detail) for the denylist terms anywhere in the history of any ref: message, identity,
     path or file content (reported at the first commit that holds that version). Terms are never reported, not even by
-    line number."""
+    line number. With `since` (a commit id), only the commits reachable from a ref but not from `since` are scanned."""
+    not_since = ["^" + since] if since else []
     term_rx = [term_pattern(t) for _n, t in terms]
 
     def found(text):
         return any(rx.search(text) for rx in term_rx)
 
     def log(*args):
-        return subprocess.run(["git", "--no-optional-locks", "log", "--all", "--no-color", *args], cwd=repo, check=True,
+        return subprocess.run(["git", "--no-optional-locks", "log", "--all", "--no-color", *not_since, *args], cwd=repo, check=True,
                               capture_output=True).stdout.decode("utf-8", "replace")
 
     # a record separator that file content cannot hold by accident: a gzip or Parquet file can hold any byte
@@ -369,6 +450,185 @@ def scan_history(repo, terms):
     return hits, len(commits)
 
 
+TRAILER = "Export-Tag"
+FIRST_MESSAGE = "meterline: first public version"
+
+
+def git_ok(args, cwd, **kw):
+    """A git command that may fail: the completed process, never an exception."""
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, **kw)
+
+
+def resolve_commit(repo, name):
+    """The full commit id that `name` resolves to in `repo`, or None."""
+    done = git_ok(["rev-parse", "--verify", "--quiet", "--end-of-options", name + "^{commit}"], repo, text=True)
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def check_tag(repo, tag, ref):
+    """Refuse unless `tag` is a tag of `repo` that names the same commit as `ref`."""
+    if git_ok(["check-ref-format", "--branch", tag], repo).returncode != 0:
+        raise SystemExit("--tag %s cannot be used as a branch name" % tag)
+    tagged = resolve_commit(repo, "refs/tags/" + tag)
+    if tagged is None:
+        raise SystemExit("--tag %s is not a tag of %s: create it on the commit to export first" % (tag, os.path.abspath(repo)))
+    commit = resolve_commit(repo, ref)
+    if commit is None:
+        raise SystemExit("--ref %s does not name a commit of %s" % (ref, os.path.abspath(repo)))
+    if commit != tagged:
+        raise SystemExit("--ref %s and the tag %s name different commits: export the commit that the tag names" % (ref, tag))
+
+
+def with_trailer(message, tag):
+    """`message` followed by one `Export-Tag:` line (it ends with that line and one newline)."""
+    if re.search(r"(?im)^%s:" % TRAILER, message):
+        raise SystemExit("--message holds an %s: line of its own: the tool adds that line from --tag" % TRAILER)
+    return message.rstrip() + "\n\n%s: %s\n" % (TRAILER, tag)
+
+
+def parse_ls_tree(raw):
+    """{path: (mode, object id)} from the output of `git ls-tree -r -z`."""
+    entries = {}
+    for row in raw.decode("utf-8", "replace").split("\0"):
+        if row:
+            info, path = row.split("\t", 1)
+            mode, _kind, oid = info.split()
+            entries[path] = (mode, oid)
+    return entries
+
+
+def tree_entries(root, object_format="sha1"):
+    """{path: (mode, object id)} of the tree that git builds from the folder `root`, in a throwaway repository (the
+    .gitignore of the folder counts, as it does when the export is committed)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        gitdir = os.path.join(tmp, "g")
+        env = {**os.environ, "GIT_DIR": gitdir, "GIT_WORK_TREE": root, "GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        git(["init", "-q", "-b", "main", "--object-format=" + object_format], root, env=env)
+        git(["add", "-A"], root, env=env)
+        tree = git(["write-tree"], root, env=env, text=True).stdout.strip()
+        return parse_ls_tree(git(["ls-tree", "-r", "-z", tree], root, env=env).stdout)
+
+
+def check_clone(clone, tag):
+    """Refuse (plain sentence) unless `clone` is the top level of a git repository, on a branch that has a commit, with no
+    uncommitted change and no branch of the name `tag`. Reads only."""
+    def read(*args):
+        return git_ok(["--no-optional-locks", *args], clone, text=True)
+    top = read("rev-parse", "--show-toplevel") if os.path.isdir(clone) else None
+    if top is None or top.returncode != 0 or os.path.realpath(top.stdout.strip()) != os.path.realpath(clone):
+        raise SystemExit("--onto %s is not the top level of a git repository: give the folder of a clone of the public repository" % clone)
+    if read("symbolic-ref", "-q", "HEAD").returncode != 0:
+        raise SystemExit("--onto %s is not on a branch (detached HEAD): switch to the branch to build on" % clone)
+    if read("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
+        raise SystemExit("--onto %s has no commit yet: export the first public version without --onto" % clone)
+    if read("status", "--porcelain").stdout.strip():
+        raise SystemExit("--onto %s has uncommitted changes (modified or untracked files): commit, stash or remove them first" % clone)
+    parts = tag.split("/")
+    blocking = ["refs/heads/" + "/".join(parts[:i]) for i in range(1, len(parts) + 1)]
+    taken = [r for r in blocking if read("show-ref", "--verify", "--quiet", r).returncode == 0]
+    taken += read("for-each-ref", "--format=%(refname)", "refs/remotes/*/" + tag).stdout.split()
+    if taken:
+        raise SystemExit("the branch %s already exists in %s (%s): the new commit goes on a new branch named after the tag"
+                         % (tag, clone, ", ".join(taken)))
+
+
+def last_export_commit(clone):
+    """The id of the first commit of `git log HEAD` that carries an `Export-Tag:` trailer, or None."""
+    fmt = "%H%x00%(trailers:key=" + TRAILER + ",valueonly,separator=%x1f)%x00"
+    tokens = git(["--no-optional-locks", "log", "HEAD", "--format=" + fmt], clone).stdout.decode("utf-8", "replace").split("\0")
+    for i in range(0, len(tokens) - 1, 2):
+        values = [v.strip() for v in tokens[i + 1].split("\x1f") if v.strip()]
+        if len(values) > 1:
+            raise SystemExit("commit %s of the public clone carries more than one %s: line" % (tokens[i].strip()[:12], TRAILER))
+        if values:
+            return tokens[i].strip()
+    return None
+
+
+def report_scan(paths, ref, root, terms, hits):
+    """Print the summary line and the hits; False (after FAILED) when there is a hit."""
+    n_files = sum(len(f) for _, _, f in os.walk(root))
+    print("exported %s from %s: %d files; scanned against %d terms" % (", ".join(paths), ref, n_files, len(terms)))
+    for kind, rel, detail in hits:
+        print("HIT  %s  %s  %s" % (kind, rel, detail))
+    if hits:
+        print("FAILED: %d hit(s); no commit made" % len(hits))
+        return False
+    print("scan clean")
+    return True
+
+
+def export_onto(a, message):
+    """Commit the export of a.ref as one new commit on top of HEAD of the clone a.onto, on a new branch named after a.tag.
+    Every refusal comes before the first write to the clone. Returns the exit status."""
+    clone = os.path.abspath(a.onto)
+    check_clone(clone, a.tag)
+    check_tag(a.repo, a.tag, a.ref)
+    with tempfile.TemporaryDirectory() as tmp:
+        new = os.path.join(tmp, "new")
+        os.mkdir(new)
+        paths = export_tree(a.repo, a.ref, new)
+        terms = load_terms(a.denylist)
+        if not terms:
+            raise SystemExit("the denylist file holds no terms")
+        hits = scan(new, terms) + scan_identity([("author/committer name", a.author_name), ("author/committer email", a.author_email),
+                                                  ("commit message", message)], terms)
+        if not report_scan(paths, a.ref, new, terms, hits):
+            return 1
+        if not a.no_gitleaks:
+            if not run_gitleaks(new):
+                print("FAILED: gitleaks found a leak in the tree; no commit made")
+                return 1
+            print("gitleaks clean")
+        fmt = git(["--no-optional-locks", "rev-parse", "--show-object-format"], clone, text=True).stdout.strip()
+        head = parse_ls_tree(git(["--no-optional-locks", "ls-tree", "-r", "-z", "HEAD"], clone).stdout)
+        last_commit = last_export_commit(clone)
+        if last_commit is None:
+            raise SystemExit("no commit of %s carries an %s: trailer, so there is no last export to compare with: export the first "
+                             "public version with --tag (for example --tag export/v0.1) and publish that" % (clone, TRAILER))
+        last = parse_ls_tree(git(["--no-optional-locks", "ls-tree", "-r", "-z", last_commit], clone).stdout)
+        entries = tree_entries(new, fmt)
+        # a path the public side changed since the last export must already be in the new export (ported back)
+        changed = [p for p in set(last) | set(head) if last.get(p) != head.get(p)]
+        diverged = sorted(p for p in changed if entries.get(p) != head.get(p))
+        if diverged and not a.allow_divergence:
+            for path in diverged:
+                print("DIVERGED  " + path)
+            print("The public repository holds changes that are not in the new export: a contribution merged there and not "
+                  "yet ported back. Port them back to the private repository first (see \"Later public versions\" in "
+                  "docs/dev/RELEASING.md); no commit made.")
+            return 1
+        if diverged:
+            print("WARNING: --allow-divergence: the new commit overwrites these paths of the public repository:")
+            for path in diverged:
+                print("  " + path)
+        if entries == head:
+            raise SystemExit("nothing to export: the tree of %s equals the tree at HEAD of %s" % (a.tag, clone))
+        return write_onto(a, clone, new, tmp, entries, message)
+
+
+def write_onto(a, clone, new, tmp, entries, message):
+    """The writes to the clone: the tree from a temporary index, one commit on top of HEAD, a new branch on it."""
+    env = {**os.environ, "GIT_AUTHOR_NAME": a.author_name, "GIT_AUTHOR_EMAIL": a.author_email,
+           "GIT_COMMITTER_NAME": a.author_name, "GIT_COMMITTER_EMAIL": a.author_email}
+    try:
+        gitdir = git(["rev-parse", "--absolute-git-dir"], clone, text=True).stdout.strip()
+        index = {**env, "GIT_INDEX_FILE": os.path.join(tmp, "index-onto")}
+        git(["--git-dir", gitdir, "--work-tree", new, "add", "-A"], new, env=index)
+        tree = git(["--git-dir", gitdir, "write-tree"], clone, env=index, text=True).stdout.strip()
+        if parse_ls_tree(git(["--git-dir", gitdir, "ls-tree", "-r", "-z", tree], clone).stdout) != entries:
+            raise SystemExit("the tree built in %s differs from the scanned export (a git setting of the clone changes what is "
+                             "added); no branch made" % clone)
+        parent = git(["rev-parse", "HEAD"], clone, text=True).stdout.strip()
+        commit = git(["commit-tree", tree, "-p", parent, "-F", "-"], clone, env=env, input=message.encode("utf-8"),
+                     text=False).stdout.decode().strip()
+        git(["switch", "-q", "-c", a.tag, commit], clone)
+    except subprocess.CalledProcessError as failed:
+        raise SystemExit("git %s failed in %s: %s" % (failed.cmd[1], clone, failed.stderr.decode("utf-8", "replace").strip())) from None
+    print("committed one commit on branch %s in %s, on top of %s (nothing pushed)" % (a.tag, clone, parent[:12]))
+    return 0
+
+
 def commit_tree(out, name, email, message):
     env = {**os.environ, "GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email,
            "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email}
@@ -379,27 +639,57 @@ def commit_tree(out, name, email, message):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--out", help="a new or empty directory for the public tree (required unless --scan-history)")
+    ap.add_argument("--out", help="a new or empty directory for the public tree (required unless --scan-history or --onto)")
     ap.add_argument("--denylist", default=os.environ.get("METERLINE_DENYLIST"),
                     help="file of terms, one per line, kept outside the repo (or env METERLINE_DENYLIST)")
-    ap.add_argument("--ref", default="origin/main")
+    ap.add_argument("--ref", default=None, help="the commit to export (default: --tag when given, else origin/main)")
     ap.add_argument("--repo", default=".")
     ap.add_argument("--scan-only", action="store_true", help="export and scan, make no commit")
     ap.add_argument("--scan-history", action="store_true",
                     help="search every commit of every ref of --repo for the denylist terms; prints kinds and commit ids only")
+    ap.add_argument("--since", help="with --scan-history: scan only the commits not reachable from this ref (the previous export tag)")
+    ap.add_argument("--tag", help="the export tag, for example export/v0.2: it must name the same commit as --ref; the commit message "
+                                  "ends with an Export-Tag line")
+    ap.add_argument("--onto", help="a clone of the public repository: make the export one new commit on a new branch named after "
+                                   "--tag, on top of its history (needs --tag, --author-name and --author-email)")
+    ap.add_argument("--allow-divergence", action="store_true",
+                    help="with --onto: go on although the public repository differs from the last export (overwrites those paths)")
     ap.add_argument("--author-name", help="required for a commit; the owner's name or a noreply identity")
     ap.add_argument("--author-email", help="required for a commit; a noreply address is allowed")
     ap.add_argument("--no-gitleaks", action="store_true", help="commit without running gitleaks on the tree")
-    ap.add_argument("--message", default="meterline: first public version")
+    ap.add_argument("--message", default=None, help="the commit message (default: \"%s\", or \"meterline: public version vX.Y\" "
+                                                    "with --onto)" % FIRST_MESSAGE)
     a = ap.parse_args(argv)
+    if a.since and not a.scan_history:
+        raise SystemExit("--since only works with --scan-history")
+    if a.allow_divergence and not a.onto:
+        raise SystemExit("--allow-divergence only works with --onto")
+    if a.scan_history and a.tag:
+        raise SystemExit("--tag does not apply to --scan-history")
+    if a.onto:
+        for flag, given in (("--out", a.out), ("--scan-only", a.scan_only), ("--scan-history", a.scan_history)):
+            if given:
+                raise SystemExit("--onto cannot be combined with %s: it makes its commit in the clone, not in a new folder" % flag)
+        for flag, given in (("--tag", a.tag), ("--author-name", a.author_name), ("--author-email", a.author_email)):
+            if not given:
+                raise SystemExit("%s is required with --onto" % flag)
     if not a.denylist:
         raise SystemExit("--denylist (or METERLINE_DENYLIST) is required: the scan does not run without it")
     if a.scan_history:
         terms = load_terms(a.denylist)
         if not terms:
             raise SystemExit("the denylist file holds no terms")
-        hits, n_commits = scan_history(a.repo, terms)
-        print("history scan: %d commits on all refs of %s; scanned against %d terms" % (n_commits, os.path.abspath(a.repo), len(terms)))
+        since = None
+        if a.since:
+            since = resolve_commit(a.repo, a.since)
+            if since is None:
+                raise SystemExit("--since %s does not name a commit of %s" % (a.since, os.path.abspath(a.repo)))
+        hits, n_commits = scan_history(a.repo, terms, since)
+        if since:
+            print("history scan: %d commits on all refs of %s not reachable from %s; scanned against %d terms"
+                  % (n_commits, os.path.abspath(a.repo), a.since, len(terms)))
+        else:
+            print("history scan: %d commits on all refs of %s; scanned against %d terms" % (n_commits, os.path.abspath(a.repo), len(terms)))
         for kind, sha, _detail in hits:
             print("HIT  %s  %s" % (kind, sha))
         if hits:
@@ -407,6 +697,14 @@ def main(argv=None):
             return 1
         print("history clean")
         return 0
+    a.ref = a.ref or a.tag or "origin/main"
+    message = a.message
+    if message is None:
+        message = ("meterline: public version " + a.tag.split("/", 1)[-1]) if a.onto else FIRST_MESSAGE
+    if a.tag:
+        message = with_trailer(message, a.tag)
+    if a.onto:
+        return export_onto(a, message)
     if not a.out:
         raise SystemExit("--out is required (unless --scan-history)")
     if not a.scan_only:
@@ -414,6 +712,8 @@ def main(argv=None):
             raise SystemExit("--author-name is required (unless --scan-only): the commit identity is never taken from git config")
         if not a.author_email:
             raise SystemExit("--author-email is required (unless --scan-only): the commit identity is never taken from git config")
+    if a.tag:
+        check_tag(a.repo, a.tag, a.ref)
     if os.path.exists(a.out) and os.listdir(a.out):
         raise SystemExit("--out must be a new or empty directory: " + a.out)
     os.makedirs(a.out, exist_ok=True)
@@ -424,15 +724,9 @@ def main(argv=None):
     hits = scan(a.out, terms)
     if not a.scan_only:
         hits += scan_identity([("author/committer name", a.author_name), ("author/committer email", a.author_email),
-                               ("commit message", a.message)], terms)
-    n_files = sum(len(f) for _, _, f in os.walk(a.out))
-    print("exported %s from %s: %d files; scanned against %d terms" % (", ".join(paths), a.ref, n_files, len(terms)))
-    for kind, rel, detail in hits:
-        print("HIT  %s  %s  %s" % (kind, rel, detail))
-    if hits:
-        print("FAILED: %d hit(s); no commit made" % len(hits))
+                               ("commit message", message)], terms)
+    if not report_scan(paths, a.ref, a.out, terms, hits):
         return 1
-    print("scan clean")
     if a.scan_only:
         return 0
     if not a.no_gitleaks:
@@ -440,7 +734,7 @@ def main(argv=None):
             print("FAILED: gitleaks found a leak in the tree; no commit made")
             return 1
         print("gitleaks clean")
-    commit_tree(a.out, a.author_name, a.author_email, a.message)
+    commit_tree(a.out, a.author_name, a.author_email, message)
     print("committed one squashed commit in", a.out, "(nothing pushed; no remote set)")
     return 0
 

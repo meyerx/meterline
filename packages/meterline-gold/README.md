@@ -169,10 +169,17 @@ The limits of gold, grouped by kind. The privacy rules above hold inside these l
 
 **What the privacy rules do not cover.** Suppression is exact against a reader who adds and subtracts published figures, within one build and one month. It does not cover:
 
-- **Two builds of one month.** A late correction to silver or `people.csv` can make a published cell differ between an earlier and a later build by one person's amount, and a reader who holds both builds learns that amount. Deliver each complete month once, and do not hand an audience two builds of the same month (spec 7.4, limits).
+- **Refreshes of one month.** A late correction to silver or `people.csv` can make a published cell differ between two builds of one month by one person's amount, and a reader who holds both learns that amount. `meterline-job` refreshes a month in progress and then freezes it, so that a closed month is delivered once; the rule is in the table below (spec 7.4, limits). A folder made by `meterline-gold build` alone has no freeze: deliver each complete month once yourself.
+- **Spike windows.** The spike and breaker alerts of `central/alert_events.csv` look back over a trailing window of days that can reach into the previous month. An alert of the month in progress can therefore change when a figure of the previous month is corrected in a later build, even though that month's published rows are frozen: `alert_events` is central only and always comes from the latest build.
 - **Outside knowledge.** A reader who knows something the files do not say, such as one colleague's usage, is not modelled.
 - **The hashing key.** Anyone who holds `METERLINE_GOLD_KEY` can compute the key of any person or actor whose id they know (a `person_id` of `people.csv`, or a provider's actor id), and so find their rows. Keep the key as closed as `delivery/`.
 - **One tree.** Additive figures follow one tree only (units, or one set of attributes). A second cross-cutting hierarchy with costs could reveal a person through its margins, so v1 offers none (spec section 15, card 2).
+
+The delivery rule, word for word as `meterline-job`, `PRIVACY.md` and `THREAT-MODEL.md` state it:
+
+| Delivery rule |
+|---|
+| A month is refreshed on every published run until it is frozen, which happens once every source has final data for it and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at the next run; from then on it is delivered once and does not change, except that an erased person's rows are removed, and after a change of the hashing key manager and person folders show only months frozen under the new key. Serve only the `published` folder, never `builds/` or `frozen/`, and give managers and executives only its latest state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception that appears and then disappears. The adopter accepts this risk and has it validated by its data protection officer. |
 
 **How a build behaves.** These follow from how the build writes its output:
 
@@ -189,6 +196,8 @@ The limits of gold, grouped by kind. The privacy rules above hold inside these l
 cp src/meterline_gold/dashboard/index.html gold/exec/
 cd gold/exec && python3 -m http.server 8000
 ```
+
+With `meterline-job`, serve the `published` folder, never `builds/` or `frozen/`: copy the file into `<gold_root>/published/exec/` and run `cd <gold_root>/published/exec && python3 -m http.server 8000`. Each run assembles a new folder, so copy the file again after a run, or let your web server add it. The folder holds only the latest published state: give managers and executives that and nothing earlier.
 
 It shows each file as a table in the file's own row order, offers no sort on a measure and computes no figure. In a file with a `hidden` column it shows an empty covered value of a `hidden` = `true` row as `hidden`, and leaves an empty value of a `hidden` = `false` row blank. Never serve the gold root or `delivery/`.
 

@@ -54,6 +54,7 @@ All commands take `--data-dir` (default `exports/meterline-litellm`, gitignored)
 |---|---|
 | `backfill --since YYYY-MM-DD` | Walks 31-day windows back from yesterday to the start date. Resumes after a failure by re-running the same command. |
 | `daily` | Reads every closed UTC day since the last day loaded, and always re-reads the two days before today (rows arrive late). With no `state.json` it stops (exit 2) and asks for `--since YYYY-MM-DD`, the first day to load, rather than quietly fetching the month again; `--since` is ignored once a state file exists. Safe to run twice a day: unchanged data publishes nothing. |
+| `auto --since YYYY-MM-DD` | Runs `backfill --since` until a backfill has published in the data folder, and `daily` afterwards, so a scheduler can run the same line every day. A backfill that stopped half way is run again. `--since` is required and is ignored, with a note on stderr, once a backfill has published. Takes the options of `backfill`. The run manifest records the command that ran under `command` and `auto` under `requested`. |
 | `rebuild` | Re-creates every record from the raw store and the published run manifests. No API calls, no key. |
 
 Options of `backfill` and `daily`: `--proxy-name`, `--rate-per-minute` (default 120; the routes document no limit), `--end-users`.
@@ -160,7 +161,7 @@ What later releases keep working, under the rules of the compatibility policy in
 
 - the `meterline-litellm` command line: its commands, options and exit codes, as listed under Commands;
 - the records it publishes under `records/`, in the v2 format of [`docs/records.md`](https://github.com/meyerx/meterline/blob/main/docs/records.md);
-- from Python, the names in `meterline_litellm.__all__`: `run` (see [From Python](#from-python)), `RunResult`, the error classes `ApiError`, `PaginationError` and `PathNotFound`, and `__version__`;
+- from Python, the names in `meterline_litellm.__all__`: `run`, `complete_through` (see [From Python](#from-python)), `RunResult`, the error classes `ApiError`, `PaginationError` and `PathNotFound`, and `__version__`;
 - the module `meterline_litellm.testing` (`FakeAPI`, `sample_dataset`, see [Testing your integration without a key](#testing-your-integration-without-a-key)).
 
 Everything else is internal and may change in any release: every other module of the `meterline_litellm` package, and the layout of the raw files, the run manifests and `state.json` (they are documented so you can read them, not so you can build on them).
@@ -176,7 +177,9 @@ result = run("backfill", since=date(2026, 9, 1), proxy_name="my-proxy", data_dir
 print(result.exit_code, result.batch_id, result.records)
 ```
 
-`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does; `command` is `"backfill"`, `"daily"` or `"rebuild"` and the options are the command-line options under their Python names (`since`, `proxy_name`, `end_users`, `rate_per_minute`, `max_retry_after`, `parquet`), plus `base_url`, which overrides `LITELLM_BASE_URL`. `credentials` is a mapping from `LITELLM_API_KEY` and `LITELLM_BASE_URL` to their values, or a function without arguments that returns one; when it is given the environment is not read, and a missing name counts as unset. With `None` the environment is read as the command line does. The key goes only to the HTTP client. `run` returns a `RunResult` (`exit_code`, `batch_id`, `manifest_path`, `records`, `windows`, `skipped`, `unknown_fields`, `ok`). A failed run does not raise: it returns the exit code the command line would exit with, after printing the same message.
+`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does; `command` is `"backfill"`, `"daily"`, `"auto"` or `"rebuild"` and the options are the command-line options under their Python names (`since`, `proxy_name`, `end_users`, `rate_per_minute`, `max_retry_after`, `parquet`), plus `base_url`, which overrides `LITELLM_BASE_URL`. `credentials` is a mapping from `LITELLM_API_KEY` and `LITELLM_BASE_URL` to their values, or a function without arguments that returns one; when it is given the environment is not read, and a missing name counts as unset. With `None` the environment is read as the command line does. The key goes only to the HTTP client. `run` returns a `RunResult` (`exit_code`, `batch_id`, `manifest_path`, `records`, `windows`, `skipped`, `unknown_fields`, `ok`). A failed run does not raise: it returns the exit code the command line would exit with, after printing the same message.
+
+`complete_through(data_dir)` returns the last UTC day the connector holds as final in `data_dir`, as a `datetime.date`, or `None` before a first published backfill. It reads `days_loaded` in the state file and applies the connector's finality rule (a day is final 2 full days after it ended) at the pull of the latest published run. The answer is the last day of the unbroken run of loaded days, from the first one, that is final then. It makes no request and takes no lock, and a damaged state file raises `StateError`.
 
 ## Testing your integration without a key
 

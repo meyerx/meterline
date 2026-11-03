@@ -1,28 +1,28 @@
 # 03 - the daily job
 
-**Goal.** Run every configured connector once a day, build gold from what they stored, say what happened as one JSON line per step, and exit non-zero if any step failed. A failed provider does not stop the others. The job picks `backfill` until a backfill has published, retries only a transient failure (exit 1), and stops and alerts on an input error (2) or a permanent refusal (3). [Operate the daily job](https://github.com/meyerx/meterline/blob/main/docs/how-to/operate-daily.md) covers locking, durations and where to look.
+**Goal.** Run every configured connector once a day, build gold from what they stored, say what happened as one JSON line per step, and exit non-zero if any step failed. A failed provider does not stop the others. Each connector runs its `auto` command, `backfill` until a backfill has published and `daily` afterwards; the job retries only a transient failure (exit 1), and stops and alerts on an input error (2) or a permanent refusal (3). [Operate the daily job](https://github.com/meyerx/meterline/blob/main/docs/how-to/operate-daily.md) covers locking, durations and where to look.
 
 **Reads.** `job.example.toml` (which connectors, where to keep data), the environment variables each connector documents for its key, and the organisation files, policy and price list that gold needs. It calls each connector through its Python entry point (`run` in `meterline_anthropic`, `meterline_anthropic_admin`, `meterline_litellm`, `meterline_copilot`), then `meterline_gold.build`. Keys never appear in the configuration.
 
 ## Run it
 
-The test runs the job end to end against the connectors' public fake APIs, so it needs no key and no network. Run it from the repository root, after the install in the README quick start (on Python 3.10 also `pip install tomli`).
+The tests of the `meterline-job` package run the job end to end against the connectors' public fake APIs, so they need no key and no network. Run them from the repository root, after the install in the README quick start (on Python 3.10 also `pip install tomli`).
 
 ```sh
-.venv/bin/python -m pytest -q examples/03-daily-job/test_job.py -p no:cacheprovider
+.venv/bin/python -m pytest -q packages/meterline-job/tests -p no:cacheprovider
 ```
 
-**Expected output.** `12 passed`. The tests check that each connector the job runs writes silver and gold is built, that a provider answering HTTP 500 gives a non-zero exit while the other connectors still write silver, that a run after a published backfill is a `daily`, that a failed first backfill is followed by a backfill and not a `daily`, that a 401 is not retried and raises an alert, that a 503 is retried once, that an input error is not retried, and that no status line holds a key. Two more check, under umask 022 and 000, that the silver copy the job stages is readable by its owner only.
+**Expected output.** `47 passed`. The tests check that each connector the job runs writes silver and gold is built, that a provider answering HTTP 500 gives a non-zero exit while the other connectors still write silver, that a run after a published backfill is a `daily`, that a failed first backfill is followed by a backfill and not a `daily`, that a 401 is not retried and raises an alert, that a 503 is retried once, that an input error is not retried, that a gold failure exits 4 and is not retried, that `parquet` and `invoice` reach gold, that a leftover `.tmp` folder is cleared, that a locked folder is skipped, and that no status line holds a key. Two more check, under umask 022 and 000, that the silver copy the job stages is readable by its owner only.
 
 ## Use it on a real account
 
 Copy `job.example.toml`, set the paths, export the keys (see each connector's README) and `METERLINE_GOLD_KEY`, and run:
 
 ```sh
-python examples/03-daily-job/job.py job.toml
+meterline-job run job.toml
 ```
 
-It prints lines such as `{"attempts": 1, "batch_id": "...", "command": "backfill", "exit_code": 0, "failure_kind": "none", "http_status": null, "ok": true, "records": {"usage": 57}, "skipped": [], "step": "claude"}` and a final `gold` line. A connector runs a `backfill` from its `since` date until a backfill has published, then `daily`. The step line of a failure also holds `failure_kind` and, for an input error or a permanent refusal, an `alert`.
+(`python examples/03-daily-job/job.py job.toml` does the same.) It prints lines such as `{"attempts": 1, "batch_id": "...", "command": "backfill", "exit_code": 0, "failure_kind": "none", "http_status": null, "ok": true, "records": {"usage": 57}, "skipped": [], "step": "claude"}` and a final `gold` line. A connector runs a `backfill` from its `since` date until a backfill has published, then `daily`. The step line of a failure also holds `failure_kind` and, for an input error or a permanent refusal, an `alert`.
 
 The job exits with the worst code of its steps. The table says what each code means and what the job does:
 
@@ -32,6 +32,7 @@ The job exits with the worst code of its steps. The table says what each code me
 | `1` | `transient` | Waits `retry_wait_seconds` (300) and runs the same command once more (`retries`, default 1). |
 | `2` | `input` | Does not retry; the line carries an `alert`. |
 | `3` | `permanent` | Does not retry; the line carries an `alert`. |
+| `4` | `build` | Gold's build failed. Never retried; the line carries an `alert`. This code belongs to the job: a connector never exits with it. |
 
 A cron line for 06:30 each day:
 

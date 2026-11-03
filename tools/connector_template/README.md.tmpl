@@ -23,12 +23,13 @@ Create a read-only key for the @@TITLE@@ API and put it in the environment as `@
 
 ## Commands
 
-Each command takes `--data-dir`; `backfill` and `daily` read the key from `@@ENV@@` and take `--provider-account-id`, the identifier of the account the records are about. It is required and must not be empty (an empty one is exit 2). The run manifest keeps it, so `rebuild` needs no option.
+Each command takes `--data-dir`; `backfill`, `daily` and `auto` read the key from `@@ENV@@` and take `--provider-account-id`, the identifier of the account the records are about. It is required and must not be empty (an empty one is exit 2). The run manifest keeps it, so `rebuild` needs no option.
 
 | Command | What it does |
 |---|---|
 | `backfill --since YYYY-MM-DD --provider-account-id ID` | Reads every closed UTC day from that day to yesterday and publishes the records. |
 | `daily --provider-account-id ID [--since YYYY-MM-DD]` | Reads every closed day since the last day loaded, and at least the last 5 closed days (`REREAD_DAYS`), which may have been revised. With no `state.json` it stops (exit 2) and asks for `--since`; with a `state.json` it ignores `--since` and says so. |
+| `auto --since YYYY-MM-DD --provider-account-id ID` | Runs `backfill --since` until a backfill has published in the data folder, and `daily` afterwards, so a scheduler can run the same line every day. A backfill that stopped half way is run again. `--since` is required and is ignored, with a note on stderr, once a backfill has published. Takes the options of `backfill`. The run manifest records the command that ran under `command` and `auto` under `requested`. |
 | `rebuild` | Rebuilds `records/` from the stored raw responses and the run manifests. It makes no request and needs no key. |
 
 Exit codes, which a run also reports as `failure_kind`:
@@ -113,11 +114,11 @@ Limits are grouped by kind. Say here what the connector does not do, what it has
 What later releases keep working:
 
 - the `@@DIST@@` command line: its commands, options and exit codes, as listed under Commands;
-- from Python, the names in `@@PKG@@.__all__`: `run`, `RunResult` and `__version__`.
+- from Python, the names in `@@PKG@@.__all__`: `run`, `complete_through`, `RunResult` and `__version__`.
 
 ## From Python
 
-`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does and returns a `RunResult` (from `meterline`): `exit_code`, `failure_kind`, `http_status`, `ok`, `batch_id`, `manifest_path`, `records`, `windows` and `skipped`. A failed run does not raise.
+`run(command, *, data_dir, credentials=None, transport=None, **options)` does what the command line does and returns a `RunResult` (from `meterline`): `exit_code`, `failure_kind`, `http_status`, `ok`, `batch_id`, `manifest_path`, `records`, `windows` and `skipped`. A failed run does not raise. `command` is `backfill`, `daily`, `auto` or `rebuild`; `backfill`, `daily` and `auto` need the option `provider_account_id`, as the command line needs `--provider-account-id`.
 
 ```python
 from datetime import date
@@ -126,10 +127,12 @@ from @@PKG@@ import run
 from @@PKG@@.testing import FakeAPI
 
 fake = FakeAPI()
-result = run("backfill", since=date(2026, 9, 1), data_dir="out", credentials={"@@ENV@@": fake.api_key},
-             transport=fake.transport)
+result = run("backfill", since=date(2026, 9, 1), provider_account_id="org-one", data_dir="out",
+             credentials={"@@ENV@@": fake.api_key}, transport=fake.transport)
 print(result.exit_code, result.records)
 ```
+
+`complete_through(data_dir)` returns the last UTC day the connector holds as final in `data_dir`, as a `datetime.date`, or `None` before a first published backfill. It reads `days_loaded` in the state file and applies the connector's finality rule (`is_final`: by default a day is final 4 days after it ended) at the pull of the latest published run. The answer is the last day of the unbroken run of loaded days, from the first one, that is final then. It makes no request and takes no lock, and a damaged state file raises `StateError`.
 
 ## Testing your integration without a key
 

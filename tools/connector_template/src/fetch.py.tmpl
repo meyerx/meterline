@@ -14,8 +14,10 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
+
+from meterline.run import requested_command
 
 from .client import BASE_URL, Client
 
@@ -128,6 +130,7 @@ class RunManifest:
     published_counts: Dict[str, int] = field(default_factory=dict)
     failures: List[str] = field(default_factory=list)
     unknown_fields: List[Dict[str, Any]] = field(default_factory=list)  # fields the provider sent that are not known
+    requested: Optional[str] = field(default_factory=requested_command)  # "auto" when auto chose the command; None otherwise
 
     def write(self, data_dir: Path) -> Path:
         body = {
@@ -135,7 +138,7 @@ class RunManifest:
             "pulled_at": self.pulled_at.astimezone(timezone.utc).strftime(TS_FORMAT),
             "provider_account_id": self.provider_account_id,
             "windows": self.windows, "raw_files": self.raw_files, "published_counts": self.published_counts,
-            "failures": self.failures, "unknown_fields": self.unknown_fields,
+            "failures": self.failures, "unknown_fields": self.unknown_fields, "requested": self.requested,
             "failure_kind": "none" if self.status == "published" else "input",  # a failed manifest is a failed check
         }
         path = Path(data_dir) / "runs" / (self.batch_id + ".json")
@@ -149,5 +152,6 @@ class RunManifest:
     def read(cls, path: Path) -> "RunManifest":
         body = json.loads(Path(path).read_text(encoding="utf-8"))
         body.pop("failure_kind", None)
+        body.setdefault("requested", None)  # a manifest written before auto existed has no requested
         body["pulled_at"] = datetime.strptime(body["pulled_at"], TS_FORMAT).replace(tzinfo=timezone.utc)
         return cls(**body)

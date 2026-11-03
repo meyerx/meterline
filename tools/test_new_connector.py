@@ -102,7 +102,10 @@ def test_the_readme_has_every_required_section_and_the_exit_code_table(package):
 def test_the_kit_passes_against_the_stub(which, request):
     done = _kit(request.getfixturevalue(which))
     assert done.returncode == 0, done.stdout[-3000:] + done.stderr[-1000:]
-    assert re.search(r"\b16 passed\b", done.stdout), done.stdout[-500:]
+    # every kit rule, and the generated file's own test of the run manifest's requested field
+    from meterline.conformance import RULES  # noqa: E402
+
+    assert re.search(r"\b%d passed\b" % (len(RULES) + 1), done.stdout), done.stdout[-500:]
 
 
 def test_the_generated_sources_pass_the_committed_ruff_config(package):
@@ -312,6 +315,45 @@ with contextlib.redirect_stderr(err):
 print(json.dumps({"exit": result.exit_code, "days": sorted({e.params["date"] for e in fake.log}), "stderr": err.getvalue()}))
 """)
     assert out["exit"] == 0 and "--since is ignored" in out["stderr"] and "2026-09-01" not in out["days"], out
+
+
+def _readme_example(package):
+    """The python block under "From Python" in the README of the generated package."""
+    text = (package / "README.md").read_text(encoding="utf-8")
+    section = text.split("\n## From Python\n", 1)[1].split("\n## ", 1)[0]
+    found = re.findall(r"^```python\n(.*?)^```", section, re.M | re.S)
+    assert len(found) == 1, section
+    return found[0]
+
+
+def _docstring_example(package):
+    """The indented example in the module docstring of the generated testing module."""
+    import ast
+    import textwrap
+    path = next((package / "src").glob("meterline_*/testing.py"))
+    doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")), clean=False)
+    found = re.findall(r"^    from datetime import date\n.*?(?=\n\S)", doc, re.M | re.S)  # up to the first unindented line
+    assert len(found) == 1, doc
+    return textwrap.dedent(found[0])
+
+
+# The examples pass no clock, so they would wait out the request throttle in real time (minutes for a window from 2026-09-01).
+# This prelude gives the process a clock whose sleep moves it; the example text itself is run unchanged.
+_NO_WAIT = """import time
+_now = [0.0]
+time.monotonic = lambda: _now[0]
+time.sleep = lambda seconds: _now.__setitem__(0, _now[0] + seconds)
+"""
+
+
+@pytest.mark.parametrize("which", ["package", "two_package"])
+@pytest.mark.parametrize("source", ["readme", "docstring"])
+def test_the_from_python_examples_of_the_readme_and_testing_module_run(which, source, request, tmp_path):
+    package = request.getfixturevalue(which)
+    example = (_readme_example if source == "readme" else _docstring_example)(package)
+    code = _NO_WAIT + example + "\nassert result.exit_code == 0, result\nprint('example ran, exit_code', result.exit_code)\n"
+    done = subprocess.run([sys.executable, "-c", code], cwd=str(tmp_path), env=_env(package), capture_output=True, text=True, timeout=SLOW)
+    assert done.returncode == 0, "the %s example failed:\n%s\n%s%s" % (source, example, done.stdout[-2000:], done.stderr[-2000:])
 
 
 # ---- T3-4: the fetcher of the stub follows the contract (raw files, paging, windows, finality, re-read days) ----

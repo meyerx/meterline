@@ -16,7 +16,7 @@ Only the latest released version of each package gets security fixes. Older vers
 
 | Package | Fixes go to |
 |---|---|
-| `meterline`, `meterline-anthropic`, `meterline-anthropic-admin`, `meterline-litellm`, `meterline-copilot`, `meterline-sim`, `meterline-gold` | the latest release |
+| `meterline`, `meterline-anthropic`, `meterline-anthropic-admin`, `meterline-litellm`, `meterline-copilot`, `meterline-sim`, `meterline-gold`, `meterline-job` | the latest release |
 
 ## Scope
 

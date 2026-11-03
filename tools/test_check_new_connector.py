@@ -413,5 +413,18 @@ def test_dependabot_is_read_from_the_pip_directories_list_whatever_surrounds_it(
     assert module.dependabot(str(tmp_path), "meterline-") != []  # a prefix of a listed name is not listed
 
 
+def test_a_tree_without_a_dependabot_file_has_nothing_to_wire_in_the_public_tree_and_a_problem_in_the_working_repository(tmp_path):
+    # the export leaves .github/dependabot.yml out: the public tree has no such file, and "not there" is then no wiring problem
+    module = wiring()
+    public = tmp_path / "public"
+    public.mkdir()
+    assert module.dependabot(str(public), "meterline-a") == []
+    # the working repository (the tree that has the backlog file) must keep the file: a missing one is still reported
+    working = tmp_path / "working"
+    working.mkdir()
+    (working / ("BACKLOG" + "-std.md")).write_text("x\n", encoding="utf-8")
+    assert module.dependabot(str(working), "meterline-a") == [".github/dependabot.yml is not there"]
+
+
 def test_the_words_of_the_not_released_line_are_one_constant():
     assert wiring().NOT_RELEASED % "meterline-acme" == "`meterline-acme` is not released yet."

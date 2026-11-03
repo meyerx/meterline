@@ -34,10 +34,13 @@ Do the steps in order. Stop at the first one that fails.
 
    ```sh
    gitleaks version        # 8.30.1, the version CI pins
-   python3 tools/export_public.py --ref origin/main \
+   python3 tools/export_public.py --ref origin/main --tag export/v0.1 \
      --denylist /path/outside/the/repo/terms.txt --out "$(mktemp -d)/public" \
      --author-name "Maintainer Name" --author-email "$NOREPLY_ADDRESS"
    ```
+
+   `--tag` adds the `Export-Tag:` line to the commit message: the later versions start from it. The tag `export/v0.1`
+   must name the same commit as `--ref`.
 
    Then search the whole working history, in the working repository. The export publishes none of it, but a term
    that only a commit message, a deleted file or an old version of a file ever held is in no tree scan, and any
@@ -58,10 +61,15 @@ The first hour of the new repository, in this order:
    with it off they have nowhere to go.
 7. Turn on secret scanning and push protection, on the same page.
 8. Turn on branch protection for `main` (a ruleset): pull request required, no force pushes, no deletion, and these
-   status checks required. The name to type is the second column; the `tests` job runs on Python 3.12 and 3.10 on
-   `main`, but only on 3.12 on a pull request, so require `tests (python 3.12)` and never the 3.10 one, which a pull
-   request does not create and so would wait for for ever. `minimum-versions` and `quickstart` are skipped on most pull
-   requests, and GitHub counts a skipped check as passed.
+   status checks required. The name to type is the second column; the `tests` job runs on Python 3.12 and 3.10 on the
+   weekly and manual runs, but only on 3.12 on a pull request, so require `tests (python 3.12)` and never the 3.10 one,
+   which a pull request does not create and so would wait for for ever. `minimum-versions` and `quickstart` are skipped
+   on most pull requests, and `audit` and `dashboard-a11y` on a pull request that changes only prose the package tests
+   do not read (`tools/ci_suite.py`); GitHub counts a skipped check as passed. `tests` always runs, so its check
+   always arrives; on such a pull request it runs fewer tests. Keep `changes` required: when it fails, the jobs that
+   need it are skipped, and only its own red check stops the merge. A push to `main` runs the light jobs only, so
+   also turn on "Require branches to be up to date before merging": the pull request's tests then ran on what `main`
+   becomes.
 
    | CI job | Check name |
    |---|---|
@@ -79,9 +87,10 @@ The first hour of the new repository, in this order:
 10. Set the repository description (the first sentence of the README) and the topics.
 11. Create the `pypi` environment and register the pending publishers (see "Publishing to PyPI", once, before the
     first release).
-12. Make sure the new repository has no `CI_RUNNER` variable and no self-hosted runner (Settings > Actions >
-    Runners): a self-hosted runner on a public repository runs anyone's pull request code. If a runner is
-    registered for the account or an organisation, remove its access to the new repository.
+12. Make sure the new repository has no `CI_RUNNER` or `CI_RUNNER_HEAVY` variable, at repository or account
+    level, and no self-hosted runner (Settings > Actions > Runners): a self-hosted runner on a public repository
+    runs anyone's pull request code. If a runner is registered for the account or an organisation, remove its
+    access to the new repository.
 13. Check that CI is green on the first commit, then run the full-history secret scan once more on a fresh clone of
     the public repository (it is one commit, so this is quick):
 
@@ -166,6 +175,57 @@ would publish the working history needs the history scanned first: `--scan-histo
 commit message, identity, path and file version of every ref) and the gitleaks command of step 3 (a secret scan of every
 commit). Run them before any such route, and treat a hit as a leak.
 
+## Later public versions
+
+Development stays in the private repository. Each later public version is one new commit on top of the public history,
+built from a tag of the private repository.
+
+1. Tag the private commit `export/vX.Y`. Never use a name that starts with `meterline` and carries `-v` and a digit: those
+   tags start the release workflow.
+2. Run the gate on the tag: the export in scan-only mode (`--ref export/vX.Y`), `python3 tools/export_public.py
+   --scan-history --since export/vPREVIOUS` (for v0.2: `--since export/v0.1`) and the full test suite. Run the blind trials
+   only when `AGENTS.md`, `llms.txt` or `docs/how-to` changed.
+3. Run the export tool only from a clean checkout of the export tag (its allowlists are constants of the tool). Clone the
+   public repository and export onto the clone. The tool makes one commit on a new branch named after the tag:
+
+   ```sh
+   python3 tools/export_public.py --tag export/vX.Y --onto /path/to/public-clone \
+     --denylist /path/outside/the/repo/terms.txt \
+     --author-name "Maintainer Name" --author-email "$NOREPLY_ADDRESS"
+   ```
+
+   After `--onto`, build the wheels, install them non-editable in a fresh venv and run `CI=true pytest -q packages tools`
+   on the public clone's new branch before pushing (an editable install hides a version that does not match the package).
+4. Push the new branch to the public repository and open a pull request there with the fixed body ("Public text" below).
+   Merge it with a merge commit, not a squash, when CI is green, so the export commit and its `Export-Tag:` line stay in the history.
+5. Release on PyPI as "Each release" describes.
+
+Porting an outside contribution back: on the public repository, run `git format-patch` for the merged commits since the
+last export commit. In the private repository, apply them with `git am` on a branch and open a pull request.
+Before merging a public pull request, review its new paths against the `EXCLUDE` list of the export: a contribution can
+add files. `git am` refuses a patch that clashes with a private-only file.
+
+The export refuses when the public repository holds a change that is not ported back. It compares the clone's HEAD with
+the clone's last export commit. For each path that changed on the public side since then, the new export must equal what the
+public repository now holds, which is the case once the change has been ported back. Otherwise it lists the paths and
+refuses, because the new commit would silently undo the change. Port it back first; `--allow-divergence` overrides the
+refusal with a warning that lists exactly those paths.
+
+## Public text
+
+All public text is pointer-only and hand-checked by the maintainer: a pull request body, a tag message, a release note, an
+issue comment. It points to `CHANGELOG.md` and says nothing about how, why or by whom a change was made. The export scan
+reads only the tree, the commit identity and the commit message, so text typed into the host's web page is covered by
+nothing else. Before posting a body, save it to a file and run:
+
+```sh
+python3 tools/check_public_text.py FILE --denylist /path/outside/the/repo/terms.txt
+```
+
+It prints `PASS` or `FAIL` and the kind of each hit (never a term): it runs the export's scan (private working traces, secret,
+e-mail and path patterns, every denylist term) on that text. The two texts of a release are fixed: the export pull request
+body `Export of export/vX.Y. What changed: CHANGELOG.md.` and the tag message `<package> <version>`.
+
 ## Publishing to PyPI
 
 Every package of the repository is published one at a time, each with its own version (see
@@ -178,10 +238,12 @@ publishes and creates the GitHub release. No PyPI token exists anywhere: PyPI ac
 that one workflow (trusted publishing). The provenance target is SLSA Build Level 2: a hosted build with signed
 provenance (a GitHub artifact attestation for every file, plus the PEP 740 attestations PyPI stores).
 
+`meterline-job` is released like the others, last: it needs `meterline-gold` and the connectors it runs (its extras) on PyPI first.
+
 ### Once, before the first release (the maintainer, by hand)
 
 1. **Reserve the package names:** `meterline`, `meterline-anthropic`, `meterline-anthropic-admin`, `meterline-litellm`,
-   `meterline-copilot`, `meterline-sim` and `meterline-gold`. On PyPI, sign in with an account that has two-factor authentication on. For each
+   `meterline-copilot`, `meterline-sim`, `meterline-gold` and `meterline-job`. On PyPI, sign in with an account that has two-factor authentication on. For each
    of these names, open "Your account", then "Publishing", and add a pending GitHub publisher: PyPI project name =
    the package name, owner = `meyerx`, repository = `meterline`, workflow = `release.yml`, environment = `pypi`.
    A pending publisher does **not** reserve a name: PyPI creates the project, and the name is yours, only at the
@@ -199,15 +261,20 @@ provenance (a GitHub artifact attestation for every file, plus the PEP 740 attes
 
 ### Each release
 
+Versions and `CHANGELOG.md` change only in the private repository, in a pull request merged into `main`; a tag whose
+commit is not on `main` is refused by the build job (`git merge-base --is-ancestor`).
+
 1. In a pull request: set the new version in `packages/<package>/pyproject.toml` (the only place it is written;
    `__version__` reads it from the installed metadata), add the release to `CHANGELOG.md`, and, if the package now
    needs a newer `meterline`, raise its `meterline>=` bound. Merge only with every CI job green, including
    `minimum-versions` and `audit`.
 2. Release `meterline` first, then the packages that depend on it: `meterline-anthropic`, `meterline-anthropic-admin`,
-   `meterline-litellm`, `meterline-copilot` and `meterline-sim`, then `meterline-gold` (its `dev` extra installs `meterline-sim`). The
+   `meterline-litellm`, `meterline-copilot` and `meterline-sim`, then `meterline-gold` (its `dev` extra installs `meterline-sim`),
+   then `meterline-job` (it needs `meterline-gold` and the connectors it runs). The
    workflow installs the built wheel to record its SBOM, so the `meterline` version a dependent requires must
    already be on PyPI.
-3. Tag the merged commit on `main` and push the tag. The tag is `<package>-v<version>`:
+3. Tag the merged commit on `main` and push the tag. The tag is `<package>-v<version>` and its message is always
+   `<package> <version>` (for example `meterline 0.3.0`), nothing else:
 
    ```sh
    git switch main && git pull --ff-only
@@ -255,4 +322,4 @@ notices.
     - What the release still does not do or has not been checked against.
 
 Between releases, Dependabot opens weekly pull requests for the pinned actions and for the dependencies, and the
-`audit` CI job runs `pip-audit` on every change.
+`audit` CI job runs `pip-audit` on every pull request that changes more than prose, and on the weekly run.

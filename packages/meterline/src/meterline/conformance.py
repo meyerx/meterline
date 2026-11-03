@@ -40,10 +40,11 @@ import os
 import stat
 from dataclasses import dataclass, field
 from decimal import Decimal
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple, Union
 
+import meterline.run as run_module
 from meterline.http import FakeClock
 from meterline.records import KINDS, validate_batch
 from meterline.run import RunResult
@@ -72,6 +73,9 @@ class Connector:
     function of the fake returning that mapping. ``backfill_options`` and ``daily_options`` are the options of those
     commands (``since`` and the like). ``fail(fake, status, times)`` scripts the fake to answer ``status`` to the next
     ``times`` requests, whatever they ask for. ``bad_options`` are options the connector rejects as input (exit 2).
+    ``auto`` runs with ``backfill_options`` (R18). ``complete_through`` is the connector's ``complete_through(data_dir)``
+    and ``is_final(day, pulled_at)`` the finality rule its fake's days follow (R19); leave either out and R19 fails,
+    telling you to set it.
     ``duplicate(fake)`` scripts the fake so that one answer holds a row, a page or a day twice, so that two records of
     the run would share a key (R16); the run must refuse it with exit 2 and publish nothing. Leave it out and R16 fails,
     telling you to set it. ``now`` is the clock of the first run; a later run
@@ -89,6 +93,8 @@ class Connector:
     now: datetime = START_NOW
     daily_after: timedelta = timedelta(days=1)
     duplicate: Optional[Callable[[Any], None]] = None
+    complete_through: Optional[Callable[[Path], Optional[date]]] = None
+    is_final: Optional[Callable[[date, datetime], bool]] = None
 
     def creds(self, fake: Any) -> Mapping[str, str]:
         return self.credentials(fake) if callable(self.credentials) else self.credentials
@@ -123,7 +129,7 @@ def _go(c: Connector, data_dir: Path, command: str, *, fake: Any = None, transpo
         capture: Optional[io.StringIO] = None) -> RunResult:
     fake = fake if fake is not None else c.make_fake()
     clk = clk_of(clock)
-    given = dict(c.backfill_options if command == "backfill" else c.daily_options)
+    given = dict(c.backfill_options if command in ("backfill", "auto") else c.daily_options)
     given.update(options or {})
     if command == "rebuild":
         given = {}
@@ -343,9 +349,15 @@ def _r09_rebuild(c: Connector, tmp: Path) -> None:
     import shutil
 
     shutil.rmtree(data / "records")
+    for path in sorted((data / "runs").glob("*.json")):  # a manifest written before auto existed has no `requested`
+        old = _manifest(path)
+        if old.pop("requested", None) is not None:
+            _fail("R09", "a plain backfill wrote requested=%r into its manifest; it is null unless auto chose the command" % old)
+        path.write_text(json.dumps(old, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     fake = c.make_fake()
     result = _go(c, data, "rebuild", fake=fake, credentials={}, transport=_timeout_transport())
-    _expect(result.exit_code == 0, "R09", "rebuild exited %d; it must need no key and make no request" % result.exit_code)
+    _expect(result.exit_code == 0, "R09", "rebuild exited %d on manifests without `requested`; it must need no key and make no "
+            "request, and read a manifest written before auto existed" % result.exit_code)
     _expect(not fake.log, "R09", "rebuild made %d request(s)" % len(fake.log))
     after = _digest(_files(data / "records"))
     _expect({Path(k).relative_to(data) for k in after} == {Path(k).relative_to(data) for k in before} and
@@ -552,6 +564,127 @@ def _r16_batch_checks(c: Connector, tmp: Path) -> None:
             "a run that failed its batch checks still published %s" % [p.name for p in published[:3]])
 
 
+def _tree(root: Path) -> List[str]:
+    """Every path under ``root`` but the lock file: the folder tree R17 says a refused run leaves as it was."""
+    return sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.name != run_module.LOCK_NAME)
+
+
+def _r17_one_run_per_folder(c: Connector, tmp: Path) -> None:
+    if run_module.fcntl is None:
+        return  # no flock on this platform: the lock is skipped with a warning, so there is nothing to prove
+    data, first, fake = _backfilled(c, tmp)
+    _expect(first.exit_code == 0, "R17", "a first backfill on the fake API exited %d, not 0" % first.exit_code)
+    tree, files, requests = _tree(data), _digest([p for p in _files(data) if p.name != run_module.LOCK_NAME]), len(fake.log)
+    err = io.StringIO()
+    with run_module.data_folder_lock(data) as held:
+        _expect(held is True, "R17", "the kit could not take the lock of a data folder no run is using")
+        refused = _go(c, data, "daily", fake=fake, now=c.now + c.daily_after, capture=err)
+    _expect((refused.exit_code, refused.failure_kind) == (1, "transient"), "R17",
+            "a run on a data folder whose lock another open file holds exited %d (%s), not 1 (transient): run() must take the "
+            "lock first, with meterline.run.data_folder_lock (stderr: %s)"
+            % (refused.exit_code, refused.failure_kind, err.getvalue().strip()[:200] or "empty"))
+    _expect("in use by another run" in err.getvalue(), "R17", "the message of a refused run does not say the data folder is in use by another run")
+    _expect(len(fake.log) == requests, "R17", "a run that found the lock held made %d request(s)" % (len(fake.log) - requests))
+    _expect(_tree(data) == tree and _digest([p for p in _files(data) if p.name != run_module.LOCK_NAME]) == files, "R17",
+            "a run that found the lock held changed the data folder")
+    again = _go(c, data, "daily", fake=fake, now=c.now + c.daily_after)
+    _expect(again.exit_code == 0, "R17", "a run after the lock was released exited %d, not 0" % again.exit_code)
+
+
+def _ran(result: RunResult) -> Dict[str, Any]:
+    """The run manifest a run wrote, ``{}`` when it wrote none."""
+    return _manifest(Path(result.manifest_path)) if result.manifest_path is not None else {}
+
+
+def _r18_auto(c: Connector, tmp: Path) -> None:
+    _expect("since" in c.backfill_options, "R18", "Connector.backfill_options has no `since`; auto runs with the backfill options")
+    later = c.now + timedelta(minutes=1)
+
+    def auto(data: Path, label: str, *, now: Optional[datetime] = None, fake: Any = None, want: str) -> None:
+        err = io.StringIO()
+        result = _go(c, data, "auto", fake=fake, now=now, capture=err)
+        ran = _ran(result)
+        _expect(result.exit_code == 0, "R18", "auto %s exited %d, not 0 (stderr: %s)"
+                % (label, result.exit_code, err.getvalue().strip()[:200] or "empty"))
+        _expect(ran.get("command") == want, "R18", "auto %s ran %r, not %s" % (label, ran.get("command"), want))
+        _expect(ran.get("requested") == "auto", "R18", "auto %s wrote requested=%r into the run manifest, not 'auto' "
+                "(the command that ran goes under command, auto under requested)" % (label, ran.get("requested")))
+        if want == "daily":
+            _expect("ignored" in err.getvalue(), "R18", "auto on the daily path does not say on stderr that --since is ignored")
+
+    data = tmp / "data"
+    auto(data, "in an empty folder", want="backfill")
+    auto(data, "after a published backfill", now=c.now + c.daily_after, want="daily")
+    rebuilt = _go(c, data, "rebuild", credentials={}, transport=_timeout_transport())
+    _expect(rebuilt.exit_code == 0, "R18", "rebuild exited %d on run manifests written by auto: read must take `requested`" % rebuilt.exit_code)
+
+    probe = c.make_fake()
+    _go(c, tmp / "probe", "backfill", fake=probe)
+    half, fake = tmp / "half", c.make_fake()
+    broken = _go(c, half, "backfill", fake=fake, transport=_cut_off(fake.transport, max(1, len(probe.log) // 2)))
+    _expect(broken.exit_code == 1 and (half / "state.json").is_file(), "R18",
+            "a backfill cut off half way exited %d and left %s state.json; the kit needs a run that stopped with exit 1 and a "
+            "state file" % (broken.exit_code, "a" if (half / "state.json").is_file() else "no"))
+    auto(half, "after a backfill that failed half way", now=later, want="backfill")
+
+    first = tmp / "daily-first"
+    daily = _go(c, first, "daily", options={"since": c.backfill_options["since"]})
+    _expect(daily.exit_code == 0 and _ran(daily).get("status") == "published", "R18",
+            "daily --since in an empty folder exited %d; the kit needs a published daily that is not a backfill" % daily.exit_code)
+    auto(first, "after a published daily and no backfill", now=later, want="backfill")
+
+    bare, fake, err = tmp / "no-since", c.make_fake(), io.StringIO()
+    options = {k: v for k, v in c.backfill_options.items() if k != "since"}
+    with contextlib.redirect_stderr(err):
+        refused = c.run("auto", data_dir=bare, credentials=c.creds(fake), transport=fake.transport, clock=FakeClock(),
+                        sleep=FakeClock().sleep, wall=FakeClock(), now=lambda: c.now, jitter=lambda: 0, **options)
+    _expect((refused.exit_code, refused.failure_kind) == (2, "input"), "R18",
+            "auto without since exited %d (%s), not 2 (input)" % (refused.exit_code, refused.failure_kind))
+    _expect(not fake.log, "R18", "auto without since made %d request(s)" % len(fake.log))
+    _expect(not [p for p in _files(bare) if p.name != run_module.LOCK_NAME] if bare.exists() else True, "R18",
+            "auto without since wrote into the data folder")
+
+
+def _last_final_day(is_final: Callable[[date, datetime], bool], first: date, pulled_at: datetime) -> Optional[date]:
+    """The last day from ``first`` to the day before the pull that is final at ``pulled_at``, ``None`` when none is."""
+    last, day = None, first
+    while day < pulled_at.astimezone(timezone.utc).date() and is_final(day, pulled_at):
+        last, day = day, day + timedelta(days=1)
+    return last
+
+
+def _r19_complete_through(c: Connector, tmp: Path) -> None:
+    _expect(c.complete_through is not None and c.is_final is not None, "R19", "the connector must set Connector.complete_through "
+            "(its complete_through function) and Connector.is_final (the finality rule its fake's days follow)")
+    complete, is_final = c.complete_through, c.is_final
+    data = tmp / "data"
+    _expect(complete(data) is None, "R19", "complete_through of a folder no run has used is %r, not None" % (complete(data),))
+
+    probe = c.make_fake()
+    _go(c, tmp / "probe", "backfill", fake=probe)
+    half, fake = tmp / "half", c.make_fake()
+    _go(c, half, "backfill", fake=fake, transport=_cut_off(fake.transport, max(1, len(probe.log) // 2)))
+    _expect(complete(half) is None, "R19", "after a backfill that failed half way complete_through is %r, not None: nothing is "
+            "final before a backfill has published" % (complete(half),))
+
+    since = c.backfill_options["since"]
+    first = since if isinstance(since, date) else date.fromisoformat(str(since))
+    # the backfill, then a daily long enough after it that a whole month of the fake's days is final
+    for command, at in (("backfill", c.now), ("daily", c.now + timedelta(days=40))):
+        result = _go(c, data, command, now=at)
+        _expect(result.exit_code == 0, "R19", "%s on the fake API exited %d, not 0" % (command, result.exit_code))
+        want, got, served = _last_final_day(is_final, first, at), complete(data), at.astimezone(timezone.utc).date() - timedelta(days=1)
+        _expect(got is None or got <= served, "R19", "after %s complete_through is %s, after the last day the fake served (%s)"
+                % (command, got, served))
+        _expect(got == want, "R19", "after %s from %s, complete_through is %s, not %s: the last day the fake marks final at the "
+                "pull (%s), of the days served through %s" % (command, first, got, want, at.isoformat(), served))
+        if command == "backfill" and got is not None:  # the records of that one run: no later version has replaced an open one
+            open_ends = [date.fromisoformat(r["period_end"]) for rows in _records(data).values() for r in rows if r.get("is_final") is False]
+            late = [d for d in open_ends if d <= got]
+            _expect(not late, "R19", "complete_through is %s, but a published record of the backfill that is not final ends on %s: a day "
+                    "is complete only when every kind of record the connector publishes holds it as final" % (got, max(late) if late else ""))
+
+
 RULES: Tuple[Rule, ...] = (
     Rule("R01", "data directory layout and run manifest keys", _r01_layout),
     Rule("R02", "records validate; money and quantities are strings, never floats", _r02_records),
@@ -569,6 +702,9 @@ RULES: Tuple[Rule, ...] = (
     Rule("R14", "the public fake API: transport, request log, fault scripting", _r14_fake),
     Rule("R15", "rebuild keeps Decimal: no float is read, the records are the same bytes", _r15_rebuild_keeps_decimal),
     Rule("R16", "batch checks run before publish", _r16_batch_checks),
+    Rule("R17", "one run per data folder: a held lock stops a second run at once", _r17_one_run_per_folder),
+    Rule("R18", "auto: backfill until a backfill has published, daily afterwards", _r18_auto),
+    Rule("R19", "complete_through: the last day loaded as final, None before a first backfill", _r19_complete_through),
 )
 _BY_ID: Dict[str, Rule] = {rule.id: rule for rule in RULES}
 

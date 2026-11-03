@@ -10,10 +10,10 @@ except _NotInstalled:  # a source tree that is not installed
 # after __version__: client.py reads it
 from meterline import RunResult
 
-from .cli import StateError, run
+from .cli import StateError, complete_through, run
 from .client import ApiError
 from .fetch import RawFileExists  # noqa: E402
 
 # The public interface is the command line, ``run``, the records it writes and the documented ``testing`` module
 # (README, "Public interface"); every other module of this package is internal.
-__all__ = ["ApiError", "RawFileExists", "RunResult", "StateError", "__version__", "run"]
+__all__ = ["ApiError", "RawFileExists", "RunResult", "StateError", "__version__", "complete_through", "run"]
