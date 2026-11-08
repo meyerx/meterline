@@ -1,0 +1,12 @@
+# /etc/systemd/system/meterline-job.timer
+# Runs meterline-job.service every day at 06:30 (the machine's time zone). Persistent=true runs it at boot if the machine
+# was off at 06:30.
+[Unit]
+Description=run the meterline daily job every day
+
+[Timer]
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

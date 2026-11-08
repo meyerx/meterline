@@ -54,6 +54,10 @@ COLUMNS = {
     "cost_ref_by_provider": "JSON object of provider to the person's cost_ref at that provider.",
     "is_final": "True when the provider will no longer revise the figure.",
     "source_records": "Number of silver records merged into the row.",
+    "model_provider": "Provider that served the model, when it differs from provider (a proxy such as litellm routes calls "
+                      "to a provider); mixed if the merged records differ; empty when the record does not say.",
+    "overlap_cost_ref": "Part of usage_cost_ref that a proxy routed to a provider whose own connector is also in this build: "
+                        "those calls are in both providers' rows. 0 for every other row; empty where the row is hidden.",
     "sessions": "Number of sessions.",
     "messages": "Number of messages.",
     "suggestions_shown": "Suggestions shown to the person.",
@@ -154,9 +158,10 @@ COLUMNS = {
     "units_stopped": "Units whose position passed their envelope.",
     "units_excess": "Sum of the units' excess.",
     "units_top_up_total": "Sum of the units' top_up_total.",
-    "event_type": "breaker, spike or scenario_alert.",
-    "subject_kind": "person or unit.",
-    "subject_key": "person_key or unit_id, as subject_kind says.",
+    "event_type": "breaker, spike, scenario_alert or proxy_overlap.",
+    "subject_kind": "person, unit or proxy.",
+    "subject_key": "person_key or unit_id, as subject_kind says; for proxy, the proxy's provider and the provider it routes "
+                   "to, joined by a slash.",
     "threshold": "Limit the event crossed.",
     "trailing_sum": "Sum of the day costs in the spike's trailing window; empty on other events.",
     "trailing_days": "Days in the spike's trailing window; empty on other events.",
@@ -200,7 +205,6 @@ OVERRIDES = {
     ("comparison_groups", "persons"): "Number of persons in the comparison cell.",
     ("scenario_persons", "cost_ref"): "The person's position: month-to-date cost_ref at the end of the month.",
     ("scenario_summary", "persons"): "Number of persons with a cap in the scenario.",
-    ("alert_events", "value"): "Day cost or position that fired the event.",
     ("alert_events", "threshold"): "Limit the event crossed, in the reference currency.",
     ("named_exceptions", "threshold"): "The rule's threshold, as written in the policy.",
     ("named_exceptions", "value"): "The person's value for the rule: a cost_ref or an event count, as condition says.",
@@ -211,6 +215,10 @@ OVERRIDES = {
     ("units", "valid_from"): "First day the row is valid. A unit has one row per validity period: take the row valid on the day.",
     ("units", "valid_to"): "Last day the row is valid; empty if open. A join on unit_id alone repeats people: check both ends of the range.",
     ("seats_month", "provider_account_id"): "Provider account label; empty when the provider has none or several.",
+    ("seats_month", "is_final"): "True when the month is complete. The seat fee of a running month is the full month's fee.",
+    ("costs_month", "is_final"): "True when the month is complete and every usage row of it is final.",
+    ("pools_month", "is_final"): "True when the month is complete and the provider will no longer revise the billing rows.",
+    ("alert_events", "value"): "Day cost or position that fired the event; for proxy_overlap, the amount counted twice.",
     ("reconciliation_month", "unreconciled_share"): (
         "unallocated_cost_source divided by org_cost_source: the organisation remainder only. It is not the reference "
         "unallocated share (the cookbook KPI one_unallocated_share), which also counts the cost of non-person and "
@@ -232,9 +240,10 @@ NEVER_EMPTY = {
     "person_month": "month person_key month_status attribution_day unit_id employed_days active_days "
                     "active_days_by_tool cost_ref cost_ref_by_provider rows_unpriced rows_unknown_model "
                     "intensity_band is_final",
-    "seats_month": "month provider seat_source eval_day seats_billed seats_on_eval_day active_seats idle_seats currency",
-    "pools_month": "month provider seats_billed pool_credits budget_state currency is_final",
-    "costs_month": "month provider currency usage_cost_ref total_cost_ref",
+    "seats_month": "month provider seat_source eval_day seats_billed seats_on_eval_day active_seats idle_seats currency "
+                   "month_status is_final",
+    "pools_month": "month provider seats_billed pool_credits budget_state currency is_final month_status",
+    "costs_month": "month provider currency usage_cost_ref total_cost_ref overlap_cost_ref month_status is_final",
     "reconciliation_month": "month provider provider_account_id currency",
     "data_quality": "provider provider_account_id metric value",
     "groups_month": "month cell_id cell_kind depth",
@@ -286,7 +295,7 @@ FOLDER = {"central": "central/", "exec": "exec/", "manager": "manager/{manager_k
 
 # the columns the hidden marker covers, per file stem (spec 7.6.2): empty there on a hidden = true row means withheld
 HIDDEN_COVERED = {
-    "exec-costs_month": ("usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref"),
+    "exec-costs_month": ("usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "overlap_cost_ref"),
     "exec-pools_month": ("gross_credits", "pool_used_credits", "overage_credits", "overage_amount",
                          "pool_used_share", "budget_state", "budget_crossed_on"),
     "exec-seats_month": ("active_seats", "idle_seats"),
@@ -333,6 +342,7 @@ DATASET_TEXT = {
     "directory": ("Directory", "One row per person with a person_month row; the only file with names and emails.",
                   "No cost column."),
     "person_day": ("Person per day", "One row per day, provider, provider account, person or actor, product and model.",
+                   "`model_provider` is the provider that served the model, where a proxy routes calls on. "
                    "Sum `cost_ref` to total or compare across providers and models: it prices every row from one price "
                    "list in one currency, and is empty when a record could not be priced (see `cost_ref_status`). Sum "
                    "`cost_source` only within one `cost_source_basis` and one `cost_source_currency`: billed, "
@@ -352,7 +362,9 @@ DATASET_TEXT = {
     "costs_month": ("Costs per month", "One row per month, provider and provider account.",
                     "For spend by provider and month sum `usage_cost_ref` (reference cost) or `total_cost_ref` (usage "
                     "plus seats). Never add `seat_cost` to `total_cost_ref`: it is already inside. Sum "
-                    "`usage_cost_source` only within one `cost_source_basis`."),
+                    "`usage_cost_source` only within one `cost_source_basis`. A proxy row's `overlap_cost_ref` is the part "
+                    "of its cost that another provider's row also holds: subtract it before adding the two. A row with "
+                    "`is_final` false belongs to a running month, whose `seat_cost` is the full month's fee."),
     "reconciliation_month": ("Reconciliation per month", "One row per month, provider and provider account.",
                              "`org_cost_source` is the provider's organisation-wide total and `actor_cost_source` the "
                              "part allocated to actors; compare them, do not add them. `cost_ref` is a different "
@@ -376,7 +388,8 @@ DATASET_TEXT = {
                          "The `*_excess` and `*_top_up_total` columns are what the scenario would have done; they "
                          "are never spend."),
     "alert_events": ("Alert events", "One row per event; nothing is sent.",
-                     "`value` and `threshold` are day or position costs; do not sum events."),
+                     "`value` and `threshold` are day or position costs; do not sum events. A `proxy_overlap` event "
+                     "carries the amount that two providers' rows both count."),
     "named_exceptions": ("Named exceptions", "One row per month, rule and selected person.",
                          "`value` is a cost for `month_cost_ref_above` and a count otherwise; do not sum across "
                          "rules."),

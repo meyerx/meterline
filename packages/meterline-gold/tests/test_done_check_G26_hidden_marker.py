@@ -20,7 +20,7 @@ FIXTURE_V11_HASHES = FIXTURE / "expected-v1.1-sha256.txt"
 TINY_V11_HASHES = FIXTURE / "tiny-sim-v1.1-sha256.txt"
 
 # finding 40 added cost_basis_label and invoice_usage to costs_month; they are withheld with the figure they describe
-COSTS_COVERED = ("usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "cost_basis_label",
+COSTS_COVERED = ("usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "overlap_cost_ref", "cost_basis_label",
                  "invoice_usage")
 POOLS_COVERED = ("gross_credits", "pool_used_credits", "overage_credits", "overage_amount", "pool_used_share",
                  "budget_state", "budget_crossed_on")
@@ -38,7 +38,14 @@ def tiny_build(example_files, tmp_path_factory):
 
     # the v1.1 hashes of TINY_V11_HASHES were made with the example policy of v1.2; that policy is kept here unchanged
     # (the shipped example was resized later, change-list finding 43), so the build still has the same inputs
-    _, prices = example_files
+    _, example_prices = example_files
+    # and with the price list of v1.2, whose Anthropic seat line is on (the shipped example has it commented out since the
+    # v0.3 hardening, B-6): the example list with that one line switched on
+    text = example_prices.read_text(encoding="utf-8")
+    line = '# - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "27.00", included_credits: null}'
+    assert line in text
+    prices = tmp_path_factory.mktemp("g26_prices") / "prices.yaml"
+    prices.write_text(text.replace(line, line[2:]), encoding="utf-8")
     policy = FIXTURE / "tiny-sim-policy-v1.2.yaml"
     sim = meterline_sim.generate(preset="tiny", seed=7, months=6, out=tmp_path_factory.mktemp("g26_sim"))
     out = tmp_path_factory.mktemp("g26_gold") / "gold"
@@ -287,8 +294,21 @@ def reason_problems(out):
 RENAMED_SINCE_V11 = {"unreconciled_share": "unallocated_share"}  # finding 41, reconciliation_month
 # MF-13 (GOLD_SCHEMA_VERSION 2.0) renamed two columns; the v1.1 hashes were recorded under the old names, so the view maps them back
 RENAMED_SINCE_V11.update({"provider_account_id": "org_id", "cell_kind": "group_id"})
-WRITTEN_SCHEMA_VERSION = "2.0"  # what the build writes now; the v1.1 view reads it as the 1.0 of the recorded bytes
+WRITTEN_SCHEMA_VERSION = "2.1"  # what the build writes now; the v1.1 view reads it as the 1.0 of the recorded bytes
 ADDED_SINCE_V11 = ("cost_basis_label", "invoice_usage")  # finding 40, costs_month
+# columns appended in GOLD_SCHEMA_VERSION 2.1 (v0.3 hardening A-2, A-3): the v1.1 bytes did not have them. is_final is new in
+# seats_month and costs_month only (pools_month had it); model_provider is new in person_day; month_status in the three org files
+ADDED_IN_2_1 = {"person_day": ("model_provider",), "seats_month": ("month_status", "is_final"), "pools_month": ("month_status",),
+                "costs_month": ("overlap_cost_ref", "month_status", "is_final")}
+
+
+def _dataset_of(header):
+    """Which of the changed datasets a header is, told by a column only that dataset has; None for every other file."""
+    for dataset, marker in (("person_day", "source_records"), ("seats_month", "seat_source"), ("pools_month", "pool_credits"),
+                            ("costs_month", "total_cost_ref")):
+        if marker in header:
+            return dataset
+    return None
 
 
 def v11_view(data):
@@ -298,8 +318,9 @@ def v11_view(data):
     header = [RENAMED_SINCE_V11.get(name, name) for name in rows[0]]
     rows[0] = header
     is_costs = "total_cost_ref" in header  # invoice_usage is also a v1.1 column of reconciliation_month
+    new_in_2_1 = ADDED_IN_2_1.get(_dataset_of(header), ())
     drop = {i for i, name in enumerate(header)
-            if (is_costs and name in ADDED_SINCE_V11) or (name == "hidden" and i == len(header) - 1)}
+            if (is_costs and name in ADDED_SINCE_V11) or name in new_in_2_1 or (name == "hidden" and i == len(header) - 1)}
     sv = header.index("schema_version")
     buf = io.StringIO(newline="")
     writer = csv.writer(buf, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "meterline-gold"
-version = "0.2.0"
+version = "0.3.0"
 description = "Turns meterline silver, organisation files, a price list and a policy file into per-person, per-group and per-audience datasets."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -24,7 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "meterline>=0.2",
+    "meterline>=0.2.0,<0.4",
     "duckdb>=1.5.3,<2",
     "pydantic>=2.10,<3",
     "PyYAML>=6.0,<7",
@@ -33,13 +33,14 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/meyerx/meterline"
+Documentation = "https://github.com/meyerx/meterline/blob/main/docs/README.md"
 Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline-gold"
 Issues = "https://github.com/meyerx/meterline/issues"
 Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=17"]
-dev = ["pytest>=8", "hypothesis>=6.100", "jsonschema>=4.18", "meterline-sim>=0.1", "pytest-xdist==3.8.0", "ruff==0.17.3"]
+dev = ["pytest>=8", "hypothesis>=6.100", "jsonschema>=4.18", "meterline-sim>=0.1.1,<0.2", "pytest-xdist==3.8.0", "ruff==0.17.3"]
 [project.scripts]
 meterline-gold = "meterline_gold.cli:main"
 

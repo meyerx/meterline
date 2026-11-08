@@ -64,3 +64,64 @@ def test_lock_skipped_without_fcntl(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert err.count("warning:") == 1 and "not locked" in err
     assert not (tmp_path / "runs" / ".lock").exists()
+
+
+# ---- v0.3 hardening A-11: a lock the job needs fails closed -----------------------------------------------------------------
+
+import pytest  # noqa: E402
+
+import meterline.run as run_module  # noqa: E402
+from meterline.run import LockUnavailable, file_lock, lock_problem  # noqa: E402
+
+
+def test_the_default_lock_still_fails_open_without_fcntl(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(run_module, "fcntl", None)
+    monkeypatch.setattr(run_module, "_warned_no_fcntl", False)
+    with file_lock(tmp_path / ".lock") as free:
+        assert free is True
+    assert "not available on this platform" in capsys.readouterr().err
+
+
+def test_a_required_lock_without_fcntl_raises_before_the_block(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_module, "fcntl", None)
+    entered = []
+    with pytest.raises(LockUnavailable, match="fcntl"):
+        with file_lock(tmp_path / ".lock", required=True):
+            entered.append(True)
+    assert entered == []
+
+
+def test_a_required_lock_whose_file_cannot_be_made_raises_and_the_default_goes_on(tmp_path, capsys):
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    with pytest.raises(LockUnavailable, match="cannot make the lock file"):
+        with file_lock(blocker / "gold" / ".lock", required=True):
+            raise AssertionError("the block ran")
+    with file_lock(blocker / "gold" / ".lock") as free:  # today's behaviour for a connector: a warning, and it goes on
+        assert free is True
+    assert "cannot make the lock file" in capsys.readouterr().err
+
+
+def test_a_required_lock_that_is_held_is_not_an_error_but_a_false(tmp_path):
+    with file_lock(tmp_path / ".lock", required=True) as first:
+        assert first is True
+        with file_lock(tmp_path / ".lock", required=True) as second:
+            assert second is False
+
+
+def test_data_folder_lock_passes_required_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(run_module, "fcntl", None)
+    with pytest.raises(LockUnavailable):
+        with run_module.data_folder_lock(tmp_path, required=True):
+            pass
+
+
+def test_lock_problem_names_what_is_missing_in_plain_words(tmp_path, monkeypatch):
+    assert lock_problem(None) is None and lock_problem(tmp_path / "gold" / ".lock") is None
+    assert mode(tmp_path / "gold") == 0o700 and mode(tmp_path / "gold" / ".lock") == 0o600  # asking makes the file the lock would use
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    assert "cannot make the lock file" in lock_problem(blocker / "gold" / ".lock")
+    monkeypatch.setattr(run_module, "fcntl", None)
+    message = lock_problem(None)
+    assert "fcntl" in message and "POSIX" in message

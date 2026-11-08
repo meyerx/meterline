@@ -136,6 +136,16 @@
       "x-hidden-covered": false,
       "x-unit": "text"
     },
+    "model_provider": {
+      "description": "Provider that served the model, when it differs from provider (a proxy such as litellm routes calls to a provider); mixed if the merged records differ; empty when the record does not say.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
     "model_tier": {
       "description": "Tier of the model in the price list, such as premium; empty for an unknown model.",
       "type": [
@@ -208,7 +218,7 @@
     "schema_version": {
       "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
       "enum": [
-        "2.0"
+        "2.1"
       ],
       "type": [
         "string"
@@ -334,7 +344,8 @@
     "cost_ref",
     "cost_ref_status",
     "is_final",
-    "source_records"
+    "source_records",
+    "model_provider"
   ],
   "title": "gold-dataset-person_day",
   "type": "object",
@@ -371,9 +382,10 @@
     "cost_ref",
     "cost_ref_status",
     "is_final",
-    "source_records"
+    "source_records",
+    "model_provider"
   ],
-  "x-cost-column-rule": "Sum `cost_ref` to total or compare across providers and models: it prices every row from one price list in one currency, and is empty when a record could not be priced (see `cost_ref_status`). Sum `cost_source` only within one `cost_source_basis` and one `cost_source_currency`: billed, consumption and estimated amounts do not add up.",
+  "x-cost-column-rule": "`model_provider` is the provider that served the model, where a proxy routes calls on. Sum `cost_ref` to total or compare across providers and models: it prices every row from one price list in one currency, and is empty when a record could not be priced (see `cost_ref_status`). Sum `cost_source` only within one `cost_source_basis` and one `cost_source_currency`: billed, consumption and estimated amounts do not add up.",
   "x-dataset": "person_day",
   "x-files": [
     "central/person_day.csv",

@@ -237,14 +237,15 @@ def test_the_publish_step_alone_works_on_the_latest_build_and_never_freezes_on_t
 
 def test_publish_without_a_build_exits_4(tmp_path, sim_org):
     code, lines = run(tmp_path, sim_org, step="publish")
-    assert code == 4 and lines[0]["failure_kind"] == "build" and "no build" in lines[0]["error"] and "alert" in lines[0]
+    assert code == 4 and lines[0]["failure_kind"] == "publish" and "no build" in lines[0]["error"] and "alert" in lines[0]
 
 
 def test_publish_does_not_run_when_gold_did_not_build(tmp_path, sim_org, monkeypatch):
     monkeypatch.setattr(meterline_gold, "build", _GoldSpy(meterline_gold.BuildFailure("x")))
     code, lines = run(tmp_path, sim_org)
     published = step(lines, "publish")
-    assert code == 4 and published["ok"] is False and "gold did not build" in published["error"]
+    assert code == 4 and published["ok"] is False and "gold failed" in published["error"]
+    assert (published["exit_code"], published["failure_kind"]) == (4, "skipped")  # gold's code, and the reason it did not run
     assert not (tmp_path / "gold" / "frozen").exists()
 
 
@@ -448,3 +449,154 @@ def test_data_complete_through_is_the_earliest_complete_through_of_the_real_conn
             for s in cfg["connector"]]
     assert all(d is None or hasattr(d, "year") for d in days) and modules
     assert publish.data_complete_through(cfg) == (None if None in days else min(days))
+
+
+# ---- v0.3 hardening A-1: the published folder says which source is stale -----------------------------------------------
+
+
+def test_a_proxy_that_answers_503_on_the_run_day_is_stale_in_the_published_folder(tmp_path, sim_org, monkeypatch):
+    from meterline_job import publish
+
+    real = publish.connector_complete_through
+    # the fakes of the anthropic and copilot connectors serve no final day (their answer is None); the proxy keeps its own
+    monkeypatch.setattr(publish, "connector_complete_through",
+                        lambda spec, data_dir: real(spec, data_dir) if spec["name"] == "proxy" else (NOW - timedelta(days=1)).date())
+    assert run(tmp_path, sim_org)[0] == 0
+    down = dict(transports(), proxy=httpx.MockTransport(lambda request: httpx.Response(503)))
+    code, lines = run(tmp_path, sim_org, days=1, transports=down, no_retry=True)
+    assert code == 1 and step(lines, "proxy")["failure_kind"] == "transient"
+    served = tmp_path / "gold" / "published"
+    published = json.loads((served / "central" / "published.json").read_text(encoding="utf-8"))
+    sources = {s["name"]: s for s in published["sources"]}
+    assert list(sources) == ["claude", "api-usage", "proxy", "copilot"]
+    assert (sources["proxy"]["step_ok"], sources["proxy"]["failure_kind"], sources["proxy"]["provider"]) == (False, "transient", "litellm")
+    assert all(sources[name]["step_ok"] is True for name in ("claude", "api-usage", "copilot"))
+    assert sources["proxy"]["last_ok_run"] is not None  # the first day's run
+    assert "stale_source proxy" in published["warnings"]
+    fresh = json.loads((served / "exec" / "freshness.json").read_text(encoding="utf-8"))
+    assert "proxy" in fresh["stale_sources"]
+    run_day = (NOW + timedelta(days=1)).date().isoformat()
+    assert fresh["data_through"] is not None and fresh["data_through"] < run_day
+
+
+def test_the_provider_of_each_kind_is_what_its_connector_writes():
+    import importlib
+
+    from meterline_job.config import KINDS, PROVIDERS
+
+    assert sorted(PROVIDERS) == sorted(KINDS)
+    for kind, (module, _extra) in KINDS.items():
+        assert PROVIDERS[kind] == importlib.import_module(module + ".normalise").PROVIDER, kind
+
+
+# ---- v0.3 hardening A-5: one lock for silver, gold and publish --------------------------------------------------------
+
+
+def _snapshot(folder):
+    return {p.relative_to(folder).as_posix(): (p.stat().st_ino, p.stat().st_mtime_ns) for p in sorted(Path(folder).rglob("*"))}
+
+
+def test_a_second_run_that_finds_the_gold_lock_held_leaves_silver_untouched(tmp_path, sim_org):
+    from meterline.run import file_lock
+
+    assert run(tmp_path, sim_org)[0] == 0
+    silver = tmp_path / "data" / "silver"
+    before = _snapshot(silver)
+    assert before, "the first run staged no silver"
+    builds = sorted(p.name for p in (tmp_path / "gold" / "builds").iterdir())
+    with file_lock(tmp_path / "gold" / ".lock", "gold folder") as held:
+        assert held is True
+        code, lines = run(tmp_path, sim_org, days=1, no_retry=True)
+    assert code == 1, lines
+    for name in ("silver", "gold", "publish"):
+        line = step(lines, name)
+        assert (line["exit_code"], line["failure_kind"]) == (1, "transient"), line
+        assert "in use by another run" in line["error"]
+    assert _snapshot(silver) == before
+    assert sorted(p.name for p in (tmp_path / "gold" / "builds").iterdir()) == builds
+
+
+# ---- v0.3 hardening A-9: the lines of gold and publish say their own cause ---------------------------------------------
+
+
+def test_a_gold_input_error_makes_publish_skipped_with_gold_s_code(tmp_path, sim_org, monkeypatch):
+    monkeypatch.setattr(meterline_gold, "build", _GoldSpy(meterline_gold.InputError("prices.yaml: no such file")))
+    code, lines = run(tmp_path, sim_org)
+    gold, published = step(lines, "gold"), step(lines, "publish")
+    assert (gold["exit_code"], gold["failure_kind"]) == (2, "input")
+    assert (published["exit_code"], published["failure_kind"]) == (2, "skipped"), published
+    assert "gold" in published["error"] and "nothing was published" in published["error"]
+    assert code == 2
+
+
+# ---- v0.3 hardening A-10: stdout carries JSON only ---------------------------------------------------------------------
+
+
+def test_every_line_on_stdout_is_one_json_object(tmp_path, sim_org, capsys):
+    code = run_job(config(tmp_path, sim_org), transports=transports(), now=lambda: NOW, sleep=lambda _s: None)
+    captured = capsys.readouterr()
+    assert code == 0
+    lines = captured.out.splitlines()
+    assert [json.loads(line)["step"] for line in lines] == STEPS
+    assert all(isinstance(json.loads(line), dict) for line in lines)
+    assert "published" in captured.err  # what a connector says for a person went to stderr
+
+
+# ---- v0.3 hardening A-11: the locks fail closed ------------------------------------------------------------------------
+
+
+def test_a_gold_root_where_the_lock_cannot_be_made_exits_2_before_any_connector_runs(tmp_path, sim_org):
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("x\n", encoding="utf-8")
+    cfg = config(tmp_path, sim_org)
+    cfg["gold_root"] = str(blocker / "gold")
+    out = io.StringIO()
+    code = run_job(cfg, transports=transports(), now=lambda: NOW, sleep=lambda _s: None, out=out)
+    lines = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert code == 2 and [line["step"] for line in lines] == ["job"], lines
+    assert (lines[0]["exit_code"], lines[0]["failure_kind"]) == (2, "input") and "lock" in lines[0]["error"]
+    assert not (tmp_path / "data").exists(), "a connector ran"
+
+
+def test_a_platform_without_fcntl_exits_2_before_any_step(tmp_path, sim_org, monkeypatch):
+    import meterline.run
+
+    monkeypatch.setattr(meterline.run, "fcntl", None)
+    for step_name in (None, "claude", "gold"):
+        out = io.StringIO()
+        code = run_job(config(tmp_path, sim_org), transports=transports(), now=lambda: NOW, sleep=lambda _s: None, out=out,
+                       step=step_name)
+        lines = [json.loads(line) for line in out.getvalue().splitlines()]
+        assert code == 2 and [line["step"] for line in lines] == ["job"], (step_name, lines)
+        assert "fcntl" in lines[0]["error"] and "POSIX" in lines[0]["error"]
+    assert not (tmp_path / "data").exists()
+
+
+def test_the_job_says_it_is_posix_only():
+    try:
+        import tomllib
+    except ImportError:  # Python 3.10
+        tomllib = pytest.importorskip("tomli")
+
+    root = Path(meterline_job.__file__).resolve().parents[2]
+    meta = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    assert "Operating System :: OS Independent" not in meta["classifiers"]
+    assert "Operating System :: POSIX" in meta["classifiers"] and "Operating System :: MacOS" in meta["classifiers"]
+    assert "POSIX" in (root / "README.md").read_text(encoding="utf-8")
+
+
+# ---- v0.3 hardening A-8: the connector step line counts its records ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("records, exit_code, total, empty", [({"usage": 0, "activity": 0}, 0, 0, True), ({}, 0, 0, True),
+                                                              ({"usage": 4, "activity": 0}, 0, 4, False),
+                                                              ({}, 1, 0, False)])  # a failed run is not "empty"
+def test_the_connector_step_line_has_records_total_and_empty_when_nothing_was_published(monkeypatch, records, exit_code, total, empty):
+    from meterline.run import RunResult
+
+    result = RunResult(exit_code=exit_code, records=records)  # failure_kind is derived from the exit code
+    monkeypatch.setattr(job_module, "run_connector", lambda *a, **k: ("backfill", result))
+    line, code = job_module.run_step({"name": "claude", "kind": "anthropic", "since": "2026-09-01"}, "unused", None, NOW, lambda _s: None,
+                                     retries=0)
+    assert code == exit_code and line["records_total"] == total
+    assert line.get("empty") is (True if empty else None)

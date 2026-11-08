@@ -1,4 +1,4 @@
 schema_version,month,provider,provider_account_id,currency,actor_cost_source,org_cost_source,org_cost_basis,unallocated_cost_source,unreconciled_share,actor_credits,org_credits,unallocated_credits,cost_ref,ref_vs_source_gap,ref_vs_source_share,invoice_usage,invoice_usage_gap,invoice_seats,invoice_seats_gap
-2.0,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,USD,62.49,62.99,consumption,0.50,0.0079,,,,69.322,6.832,0.1093,63.50,0.51,451.50,0.00
-2.0,2026-05,github_copilot,org:fixture-co,USD,4.80,1.15,billed,,,480,480,0,4.80,0.00,0.0000,1.15,0.00,68.75,0.00
-2.0,2026-05,litellm,fixture-proxy,USD,6.75,6.75,estimate,0.00,0.0000,,,,7.447,0.697,0.1033,,,,
+2.1,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,USD,62.49,62.99,consumption,0.50,0.0079,,,,69.322,6.832,0.1093,63.50,0.51,451.50,0.00
+2.1,2026-05,github_copilot,org:fixture-co,USD,4.80,1.15,billed,,,480,480,0,4.80,0.00,0.0000,1.15,0.00,68.75,0.00
+2.1,2026-05,litellm,fixture-proxy,USD,6.75,6.75,estimate,0.00,0.0000,,,,7.447,0.697,0.1033,,,,

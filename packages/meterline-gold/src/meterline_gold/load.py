@@ -605,11 +605,12 @@ def _load_silver(con, silver, hasher, tmpdir):
          ("tokens_cache_write", "BIGINT"), ("tokens_cache_write_5m", "BIGINT"), ("tokens_cache_write_1h", "BIGINT"),
          ("tokens_input_total", "BIGINT"), ("tokens_output", "BIGINT"), ("requests", "BIGINT"),
          ("ai_credit", D), ("cost", D), ("currency", "VARCHAR"), ("cost_basis", "VARCHAR"), ("is_final", "BOOLEAN"),
-         ("batch_id", "VARCHAR"), ("pulled_date", "DATE")],
+         ("batch_id", "VARCHAR"), ("pulled_date", "DATE"), ("model_provider", "VARCHAR")],
         ((r.provider, r.provider_account_id, r.scope, r.grain, r.period_start, r.actor_kind, ak(r.provider, r.actor_kind, r.actor_id),
           r.product, r.model, r.tokens_input_uncached, r.tokens_cache_read, r.tokens_cache_write,
           r.tokens_cache_write_5m, r.tokens_cache_write_1h, r.tokens_input_total, r.tokens_output, r.requests,
-          r.quantities.get("ai_credit"), r.cost, r.currency, r.cost_basis, r.is_final, r.batch_id, utc_day(r))
+          r.quantities.get("ai_credit"), r.cost, r.currency, r.cost_basis, r.is_final, r.batch_id, utc_day(r),
+          r.model_provider)
          for r in usage), tmpdir)
     load_table(
         con, "silver_usage_batches",

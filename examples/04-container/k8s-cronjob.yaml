@@ -1,0 +1,74 @@
+# Example 04, Kubernetes: the job as a CronJob, with one persistent volume for the data folders and one for the gold root.
+# A pattern, not tested against a cluster: change the image, the schedule, the storage class and the names to your own.
+# Build the image from the Dockerfile of this folder and push it to your registry first. No key is written here: the keys
+# come from the secret that secretKeyRef names, which you create yourself (kubectl create secret generic meterline-keys ...).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meterline-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 20Gi
+---
+# The whole gold root: `published` inside it is a relative link to a folder beside it, so it cannot be mounted on its own.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meterline-gold
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: meterline-job
+spec:
+  schedule: "30 6 * * *"            # once a day, UTC
+  concurrencyPolicy: Forbid         # one job at a time per data folder
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0               # the job retries a transient failure itself; gold is never retried
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001        # the user of the image: it owns /data, /gold and /config
+            runAsGroup: 10001
+            fsGroup: 10001
+          containers:
+            - name: meterline-job
+              image: registry.example.com/meterline-job:0.1.0
+              command: ["meterline-job"]
+              args: ["run", "/config/job.toml"]
+              env:
+                - name: METERLINE_GOLD_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: meterline-keys
+                      key: gold-key
+                # one entry per connector in the configuration, each from the same secret, for example:
+                - name: ANTHROPIC_ADMIN_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: meterline-keys
+                      key: anthropic-admin-key
+              volumeMounts:
+                - {name: data, mountPath: /data}
+                - {name: gold, mountPath: /gold}
+                - {name: config, mountPath: /config, readOnly: true}
+          volumes:
+            - name: data
+              persistentVolumeClaim: {claimName: meterline-data}
+            - name: gold
+              persistentVolumeClaim: {claimName: meterline-gold}
+            - name: config
+              configMap: {name: meterline-config}   # holds job.toml, the organisation files, policy.yaml and prices.yaml

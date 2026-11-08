@@ -57,6 +57,15 @@ FROM (SELECT p.scenario_id, p.unit_id, p.month,
       WHERE p.pos >= CAST(f.fraction * p.envelope AS DECIMAL(38,12))
       GROUP BY p.scenario_id, p.unit_id, p.month, CAST(f.fraction * p.envelope AS DECIMAL(38,12))) y;
 
+-- proxy overlap (v0.3 hardening A-2): one event per proxy, provider it routes to and month, with the amount counted twice;
+-- the day is the month's evaluation day, the subject is "<proxy provider>/<provider routed to>", the threshold is 0
+CREATE OR REPLACE TABLE proxy_overlap_events AS
+SELECT m.eval_day AS day, o.provider || '/' || o.model_provider AS subject_key, sum(o.overlap) AS value
+FROM usage_overlap o
+JOIN months m ON m.month = o.month
+GROUP BY m.eval_day, o.provider, o.model_provider
+HAVING sum(o.overlap) > 0;
+
 CREATE OR REPLACE TABLE alert_events AS
 SELECT day, 'breaker' AS event_type, '' AS scenario_id, 'person' AS subject_kind, person_key AS subject_key,
        value, threshold, CAST(NULL AS DECIMAL(38,12)) AS trailing_sum, CAST(NULL AS BIGINT) AS trailing_days
@@ -67,7 +76,11 @@ FROM spike_events
 UNION ALL
 SELECT DISTINCT day, 'scenario_alert', scenario_id, subject_kind, subject_key, value, threshold,
        CAST(NULL AS DECIMAL(38,12)), CAST(NULL AS BIGINT)
-FROM scenario_alerts;
+FROM scenario_alerts
+UNION ALL
+SELECT day, 'proxy_overlap', '', 'proxy', subject_key, value, CAST(0 AS DECIMAL(38,12)),
+       CAST(NULL AS DECIMAL(38,12)), CAST(NULL AS BIGINT)
+FROM proxy_overlap_events;
 
 -- named exceptions (7.7): the persons a rule selects, per month
 CREATE OR REPLACE TABLE named_exceptions AS

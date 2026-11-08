@@ -61,6 +61,7 @@ def scenario(tmp_path_factory):
         "connector": [{"name": "anthropic", "kind": "anthropic", "since": "2026-04-01"},
                       {"name": "github_copilot", "kind": "copilot", "since": "2026-04-01"},
                       {"name": "litellm", "kind": "litellm", "since": "2026-04-01"}],
+        "publish": {"keep_builds": 20},  # these tests read earlier builds; pruning has its own tests
     }
     mp = pytest.MonkeyPatch()
     ok = SimpleNamespace(ok=True, exit_code=0, failure_kind="none", http_status=None, batch_id=None, records={}, skipped=[])

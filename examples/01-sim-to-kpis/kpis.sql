@@ -14,12 +14,31 @@ SELECT month,
        provider,
        cost_source_basis AS basis,
        CASE WHEN bool_or(hidden) THEN NULL ELSE sum(usage_cost_source) END AS spend_source,
-       CASE WHEN bool_or(hidden) THEN NULL ELSE sum(usage_cost_ref) END AS spend_ref,
-       CASE WHEN bool_or(hidden) THEN NULL ELSE sum(total_cost_ref) END AS spend_ref_with_seats,
+       CASE WHEN bool_or(hidden) THEN NULL ELSE sum(usage_cost_ref) - sum(overlap_cost_ref) END AS spend_ref,
+       CASE WHEN bool_or(hidden) THEN NULL ELSE sum(total_cost_ref) - sum(overlap_cost_ref) END AS spend_ref_with_seats,
+       CASE WHEN bool_or(hidden) THEN NULL ELSE sum(overlap_cost_ref) END AS routed_to_another_provider,
        bool_or(hidden) AS withheld
 FROM costs_month
+WHERE is_final  -- the month in progress is left out; delete this line to include it
 GROUP BY month, provider, cost_source_basis
 ORDER BY month, provider, cost_source_basis;
+
+-- name: cash_view
+-- title: Cash view
+-- audience: exec
+-- dataset: costs_month
+SELECT c.month,
+       c.provider,
+       CASE WHEN bool_or(c.hidden OR coalesce(p.hidden, false)) THEN NULL ELSE sum(c.seat_cost) END AS seat_cost,
+       CASE WHEN bool_or(c.hidden OR coalesce(p.hidden, false)) THEN NULL ELSE sum(p.overage_amount) END AS overage_amount,
+       CASE WHEN bool_or(c.hidden OR coalesce(p.hidden, false)) THEN NULL
+            ELSE coalesce(sum(c.seat_cost), 0) + coalesce(sum(p.overage_amount), 0) END AS cash_seats_and_overage,
+       CASE WHEN bool_or(c.hidden) THEN NULL ELSE sum(c.invoice_usage) END AS invoice_usage,
+       bool_or(c.hidden OR coalesce(p.hidden, false)) AS withheld
+FROM costs_month c
+LEFT JOIN pools_month p ON p.month = c.month AND p.provider = c.provider AND p.provider_account_id = c.provider_account_id
+GROUP BY c.month, c.provider
+ORDER BY c.month, c.provider;
 
 -- name: spend_by_model
 -- title: Spend by model
@@ -28,9 +47,14 @@ ORDER BY month, provider, cost_source_basis;
 SELECT month,
        provider,
        model,
-       sum(cost_ref) AS spend_ref,
+       sum(cost_ref) FILTER (WHERE NOT routed) AS spend_ref,
+       coalesce(sum(cost_ref) FILTER (WHERE routed), 0) AS routed_to_another_provider,
        count(*) FILTER (WHERE cost_ref_status NOT IN ('priced', 'included')) AS rows_not_priced
-FROM person_day
+FROM (
+    SELECT *,
+           coalesce(model_provider <> provider AND model_provider IN (SELECT provider FROM person_day), false) AS routed
+    FROM person_day
+) AS d
 GROUP BY month, provider, model
 ORDER BY month, provider, model;
 
@@ -53,7 +77,7 @@ ORDER BY month, cell_key;
 -- dataset: person_month
 WITH RECURSIVE placed AS (
     SELECT p.month, p.person_key, p.cost_ref, p.attribution_day,
-           u.unit_id, u.name AS unit_name, u.kind AS unit_kind, u.parent_id
+           u.unit_id, u.name AS unit_name, u.kind AS unit_kind, u.parent_id, u.cost_center
     FROM person_month p
     JOIN units u ON u.unit_id = p.unit_id
                 AND u.valid_from <= p.attribution_day
@@ -80,12 +104,13 @@ SELECT pl.month,
        pl.unit_name,
        pl.unit_kind,
        pl.unit_kind = 'team' AS is_team,
+       pl.cost_center,
        d.department_id,
        count(*) AS persons,
        sum(pl.cost_ref) AS spend_ref
 FROM placed pl
 LEFT JOIN department d ON d.month = pl.month AND d.person_key = pl.person_key AND d.nearest = 1
-GROUP BY pl.month, pl.unit_id, pl.unit_name, pl.unit_kind, d.department_id
+GROUP BY pl.month, pl.unit_id, pl.unit_name, pl.unit_kind, pl.cost_center, d.department_id
 ORDER BY pl.month, pl.unit_id;
 
 -- name: cost_per_active_person
@@ -211,9 +236,10 @@ ORDER BY r.month, r.provider;
 WITH monthly AS (
     SELECT month,
            bool_or(hidden) AS withheld,
-           sum(total_cost_ref) AS spend_ref_with_seats
+           sum(total_cost_ref) - sum(overlap_cost_ref) AS spend_ref_with_seats
     FROM costs_month
     GROUP BY month
+    HAVING bool_and(is_final)  -- the month in progress is left out; delete this line to include it
 )
 SELECT month,
        CASE WHEN NOT withheld THEN spend_ref_with_seats END AS spend_ref_with_seats,

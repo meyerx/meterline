@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SQL = ROOT / "examples" / "01-sim-to-kpis" / "kpis.sql"
 DOC = ROOT / "docs" / "how-to" / "finops-kpis.md"
 KEY = b"a-key-of-at-least-32-bytes-that-you-keep-out-of-git"
-EXPECTED = ["spend_by_provider_month", "spend_by_model", "spend_by_unit", "spend_by_team", "cost_per_active_person",
+EXPECTED = ["spend_by_provider_month", "cash_view", "spend_by_model", "spend_by_unit", "spend_by_team", "cost_per_active_person",
             "seat_utilisation", "idle_seat_cost", "cache_share_of_input", "cache_savings", "unreconciled_share",
             "one_unallocated_share", "month_over_month_growth"]
 NEW = ["cache_savings", "one_unallocated_share", "spend_by_team"]
@@ -100,11 +100,76 @@ def _truth(truth):
             for t in truth["totals"] if t["kind"] == "usage" and t["grain"] == "day" and t["cost"] is not None}
 
 
+def _final_provider_months(gold):
+    """{(provider, month)} of central/costs_month whose is_final is true, read straight from the file."""
+    import csv
+
+    with open(Path(gold) / "central" / "costs_month.csv", encoding="utf-8", newline="") as handle:
+        return {(r["provider"], r["month"]) for r in csv.DictReader(handle) if r["is_final"] == "true"}
+
+
+def _without_the_final_filter(name):
+    """The query with the line that leaves out the month in progress deleted: how a reader asks for that month."""
+    sql = kpis.read_queries()[name]["sql"]
+    kept = [line for line in sql.splitlines() if "-- the month in progress is left out" not in line and "HAVING bool_and(is_final)" not in line]
+    assert len(kept) == len(sql.splitlines()) - 1, name
+    return "\n".join(kept)
+
+
+def _rows_of(gold, audience, sql):
+    import duckdb
+    con = duckdb.connect(":memory:")
+    try:
+        kpis.load_views(con, gold, audience)
+        kpis.load_prices(con, PRICES)
+        cursor = con.execute(sql)
+        cols = [d[0] for d in cursor.description]
+        return [dict(zip(cols, r)) for r in cursor.fetchall()]
+    finally:
+        con.close()
+
+
 def test_done_check_B7_spend_by_provider_and_month_equals_the_ground_truth(tiny):
     gold, truth = tiny
-    expected = _truth(truth)
+    final = _final_provider_months(gold)
+    expected = {k: v for k, v in _truth(truth).items() if (k[0], k[2]) in final}
     got = {(r["provider"], r["basis"] or "", r["month"]): r["spend_source"] for r in _rows(gold, "central", "spend_by_provider_month")}
-    assert got == expected
+    assert expected and got == expected
+
+
+@pytest.fixture(scope="module")
+def running(tmp_path_factory):
+    """The tiny simulated data cut on the 15th of its last month and built: that month is the month in progress."""
+    import json
+    run = meterline_sim.generate(preset="tiny", seed=7, months=6, out=tmp_path_factory.mktemp("run_sim"))
+    paths = sorted(Path(run).rglob("*.jsonl"))
+    last = max(json.loads(line)["period_start"] for p in paths for line in p.read_text(encoding="utf-8").splitlines() if line.strip())
+    silver = tmp_path_factory.mktemp("run_silver")
+    for p in paths:
+        target = silver / p.relative_to(run)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        kept = [line for line in p.read_text(encoding="utf-8").splitlines() if line.strip() and json.loads(line)["period_start"] <= last[:8] + "15"]
+        target.write_text("".join(line + "\n" for line in kept), encoding="utf-8")
+    base = Path(meterline_gold.__file__).resolve().parent / "examples"
+    out = tmp_path_factory.mktemp("run_gold") / "gold"
+    meterline_gold.build(silver=silver, org=Path(run) / "org", policy=base / "policy.example.yaml",
+                         prices=base / "prices.example.yaml", key=KEY, out=out)
+    return out
+
+
+def test_the_month_in_progress_is_left_out_unless_asked(tiny, running):
+    gold, truth = running, None
+    import csv
+    with open(Path(gold) / "central" / "costs_month.csv", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    running = max(r["month"] for r in rows)
+    assert {r["is_final"] for r in rows if r["month"] == running} == {"false"}  # the latest simulated month is still running
+    for name, audience in (("spend_by_provider_month", "central"), ("month_over_month_growth", "exec")):
+        assert running not in {r["month"] for r in _rows(gold, audience, name)}, name
+        assert running in {r["month"] for r in _rows_of(gold, audience, _without_the_final_filter(name))}, name
+    # asked for: every provider-month of costs_month is there, the running one included
+    asked = {(r["provider"], r["month"]) for r in _rows_of(gold, "central", _without_the_final_filter("spend_by_provider_month"))}
+    assert asked == {(r["provider"], r["month"]) for r in rows}
 
 
 def test_done_check_B7_exec_spend_matches_the_truth_and_withholds_the_rest(tiny):
@@ -117,14 +182,16 @@ def test_done_check_B7_exec_spend_matches_the_truth_and_withholds_the_rest(tiny)
     for r in shown:
         assert r["spend_source"] == expected[(r["provider"], r["basis"] or "", r["month"])]
     # a withheld row has no figure at all, not a partial sum or a zero
-    assert all(r["spend_source"] is None and r["spend_ref"] is None and r["spend_ref_with_seats"] is None for r in withheld)
+    assert all(r["spend_source"] is None and r["spend_ref"] is None and r["spend_ref_with_seats"] is None
+               and r["routed_to_another_provider"] is None for r in withheld)
 
 
 def test_a_wrong_expected_total_is_caught(tiny):
     # negative control: the same comparison against a truth one cent higher differs
     gold, truth = tiny
     expected = {k: v + Decimal("0.01") for k, v in _truth(truth).items()}
-    got = {(r["provider"], r["basis"] or "", r["month"]): r["spend_source"] for r in _rows(gold, "central", "spend_by_provider_month")}
+    got = {(r["provider"], r["basis"] or "", r["month"]): r["spend_source"]
+           for r in _rows_of(gold, "central", _without_the_final_filter("spend_by_provider_month"))}
     assert got != expected
 
 
@@ -316,3 +383,117 @@ def test_the_cookbook_has_the_column_traps_and_the_team_rule():
     assert "reference estimate" in cache and "Copilot" in cache and "price list" in cache
     one = text.split("### Reference unallocated share", 1)[1].split("\n### ", 1)[0]
     assert "github_copilot" in one and "left_out" in one
+
+
+# ---- v0.3 hardening A-2: the cookbook totals do not add a proxy's calls to the provider's own ---------------------------
+
+FIXTURE_INPUT = ROOT / "docs" / "gold-fixture" / "input"
+FIXTURE_KEY = b"meterline-gold-fixture-key-not-a-secret"
+
+
+@pytest.fixture(scope="module")
+def routed(tmp_path_factory):
+    """The hand-built gold fixture with two of the proxy's three records routed to anthropic and every record final."""
+    import json
+    import shutil
+
+    base = tmp_path_factory.mktemp("routed")
+    shutil.copytree(FIXTURE_INPUT, base / "in")
+    for path in sorted((base / "in" / "silver" / "records").glob("*/*.jsonl")):
+        out, routed_so_far = [], 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            if "is_final" in record:
+                record["is_final"] = True
+            if path.parent.name == "usage" and record["provider"] == "litellm" and routed_so_far < 2:
+                record["model_provider"] = "anthropic"
+                routed_so_far += 1
+            out.append(json.dumps(record, sort_keys=True))
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    inp = base / "in"
+    out = base / "out"
+    meterline_gold.build(silver=inp / "silver", org=inp / "org", policy=inp / "policy.yaml", prices=inp / "prices.yaml",
+                         invoice=inp / "invoice.csv", key=FIXTURE_KEY, out=out)
+    return out
+
+
+def _person_day(gold):
+    import csv
+
+    with open(Path(gold) / "central" / "person_day.csv", encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def test_the_spend_total_subtracts_the_part_a_proxy_routed_to_another_provider(routed):
+    days = _person_day(routed)
+    whole = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] == "litellm")
+    part = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] == "litellm" and r["model_provider"] == "anthropic")
+    assert Decimal(0) < part < whole
+    rows = {r["provider"]: r for r in _rows(routed, "central", "spend_by_provider_month")}
+    assert rows["litellm"]["spend_ref"] == whole - part
+    assert rows["litellm"]["routed_to_another_provider"] == part
+    assert rows["litellm"]["spend_ref_with_seats"] == whole - part  # the proxy has no seat fee
+    assert rows["anthropic"]["routed_to_another_provider"] == 0
+    both = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] in ("litellm", "anthropic"))
+    assert rows["litellm"]["spend_ref"] + rows["anthropic"]["spend_ref"] == both - part  # the routed calls are counted once
+
+
+def test_the_model_total_subtracts_it_too(routed):
+    days = _person_day(routed)
+    part = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] == "litellm" and r["model_provider"] == "anthropic")
+    whole = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] == "litellm")
+    rows = [r for r in _rows(routed, "central", "spend_by_model") if r["provider"] == "litellm"]
+    assert sum(r["spend_ref"] for r in rows) == whole - part and sum(r["routed_to_another_provider"] for r in rows) == part
+
+
+def test_the_growth_total_subtracts_it_and_a_central_total_is_the_sum_without_the_routed_part(routed):
+    days = _person_day(routed)
+    part = sum(Decimal(r["cost_ref"] or 0) for r in days if r["provider"] == "litellm" and r["model_provider"] == "anthropic")
+    import csv
+
+    with open(Path(routed) / "central" / "costs_month.csv", encoding="utf-8", newline="") as handle:
+        costs = list(csv.DictReader(handle))
+    everything = sum(Decimal(r["total_cost_ref"]) for r in costs)
+    sql = kpis.read_queries()["month_over_month_growth"]["sql"]
+    rows = _rows_of(routed, "central", sql)
+    assert len(rows) == 1 and rows[0]["spend_ref_with_seats"] == everything - part
+
+
+# ---- v0.3 hardening B-6: cash view, cost_center, no active Anthropic seat line --------------------------------------------
+
+
+def test_the_cash_view_is_seat_cost_plus_overage_amount_per_provider_and_month(routed):
+    import csv
+
+    def read(name):
+        with open(Path(routed) / "central" / (name + ".csv"), encoding="utf-8", newline="") as handle:
+            return list(csv.DictReader(handle))
+
+    seats = {(r["provider"], r["month"]): Decimal(r["seat_cost"] or 0) for r in read("costs_month")}
+    overage = {(r["provider"], r["month"]): Decimal(r["overage_amount"]) for r in read("pools_month") if r["overage_amount"]}
+    invoice = {(r["provider"], r["month"]): Decimal(r["invoice_usage"]) for r in read("costs_month") if r["invoice_usage"]}
+    rows = {(r["provider"], r["month"]): r for r in _rows(routed, "central", "cash_view")}
+    assert set(rows) == set(seats)
+    assert any(overage.get(k) for k in seats), "the fixture should hold an overage amount"
+    for key, row in rows.items():
+        assert row["cash_seats_and_overage"] == seats[key] + overage.get(key, Decimal(0)), key
+        assert row["seat_cost"] == (seats[key] or None) or row["seat_cost"] == seats[key]
+        assert row["invoice_usage"] == invoice.get(key)  # where a source gives it, and only there
+    assert any(row["invoice_usage"] is not None for row in rows.values())
+
+
+def test_the_team_query_returns_the_cost_center(tiny):
+    gold, _ = tiny
+    rows = _rows(gold, "central", "spend_by_team")
+    assert rows and all("cost_center" in r for r in rows)
+    assert any(r["cost_center"] for r in rows)
+
+
+def test_the_example_price_list_has_no_active_anthropic_seat_line():
+    import yaml
+
+    text = (PRICES).read_text(encoding="utf-8")
+    seats = yaml.safe_load(text).get("seats") or []
+    assert not [s for s in seats if s.get("provider") == "anthropic"]
+    assert any(line.lstrip().startswith("#") and "anthropic" in line and "per_month" in line for line in text.splitlines()), (
+        "the commented-out line should stay as an example")

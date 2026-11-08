@@ -85,12 +85,13 @@ def test_every_dependency_has_a_lower_bound(package):
 @pytest.mark.parametrize("package", [p for p in PACKAGES if p != "meterline"])
 def test_dependents_require_the_meterline_that_has_the_names_they_import(package):
     reqs = [r for r in project(package)["dependencies"] if requirement_name(r) == "meterline"]
-    # meterline.run.data_folder_lock first shipped in meterline 0.3.0; a package whose source names it needs that
-    # version, and the other packages need only the 0.2 that has the v2 records
+    # meterline.run.data_folder_lock first shipped in meterline 0.3.0 and the auto rule for an empty first backfill in 0.3.1;
+    # a package whose source names the lock needs 0.3.1, and the other packages need only the 0.2.0 that has the v2 records.
+    # Both name an upper bound below the next minor version (the v0.3 hardening, C-4)
     src = os.path.join(ROOT, "packages", package, "src")
     uses_lock = any("data_folder_lock" in open(os.path.join(base, n), encoding="utf-8").read()
                     for base, _dirs, files in os.walk(src) for n in files if n.endswith(".py"))
-    assert reqs == ["meterline>=0.3" if uses_lock else "meterline>=0.2"]
+    assert reqs == ["meterline>=0.3.1,<0.4" if uses_lock else "meterline>=0.2.0,<0.4"]
 
 
 def _imports(folder):

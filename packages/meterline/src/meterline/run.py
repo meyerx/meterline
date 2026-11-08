@@ -115,16 +115,43 @@ def result_of_run(data_dir: Union[str, Path], exit_code: int, before: FrozenSet[
 # ---- one run per data folder ----------------------------------------------------------------------------------------
 
 
+class LockUnavailable(RuntimeError):
+    """A lock that was required could not be made: no ``fcntl`` on this platform, or the lock file cannot be created."""
+
+
+def lock_problem(path: Optional[Union[str, Path]] = None) -> Optional[str]:
+    """Why ``file_lock(path, required=True)`` would raise, in plain words, or ``None`` when it would not.
+
+    Without ``path`` only the platform is asked. With one, the folder of the lock file is made if needed and the file is
+    opened (not locked, and left in place if it was made), as ``file_lock`` does."""
+    if fcntl is None:
+        return ("file locking (fcntl) is not available on this platform; the job needs it, so it runs on a POSIX system such "
+                "as Linux or macOS only")
+    if path is not None:
+        lock_path = Path(path)
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.close(os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600))
+        except OSError as exc:
+            return "cannot make the lock file %s (%s); nothing was done" % (lock_path, exc.strerror or type(exc).__name__)
+    return None
+
+
 @contextlib.contextmanager
-def file_lock(path: Union[str, Path], what: str = "data folder") -> Iterator[bool]:
+def file_lock(path: Union[str, Path], what: str = "data folder", required: bool = False) -> Iterator[bool]:
     """An exclusive, non-blocking ``flock`` on the file ``path``, held for the length of the ``with`` block.
 
     Yields ``True`` when the caller holds the lock and ``False`` when another open file holds it: the message
     ``transient: <what> is in use by another run`` then goes to stderr and the caller must stop and write nothing. The
     operating system releases the lock when the process ends, whatever the way. The file is made 0600 in a 0700 folder.
-    Without ``fcntl`` the lock is skipped (``True``) with one warning per process; a lock file that cannot be made is a
-    warning too, and the run goes on without the lock."""
+    By default, without ``fcntl`` the lock is skipped (``True``) with one warning per process, and a lock file that cannot
+    be made is a warning too: the run goes on without the lock (what a connector does). With ``required=True`` both raise
+    ``LockUnavailable`` before the block, with the message of ``lock_problem``: the job's locks fail closed."""
     global _warned_no_fcntl
+    if required:
+        problem = lock_problem(path)
+        if problem:
+            raise LockUnavailable(problem)
     if fcntl is None:
         if not _warned_no_fcntl:
             _warned_no_fcntl = True
@@ -153,12 +180,13 @@ def file_lock(path: Union[str, Path], what: str = "data folder") -> Iterator[boo
         os.close(handle)  # closing the file releases the lock
 
 
-def data_folder_lock(data_dir: Union[str, Path]) -> "contextlib.AbstractContextManager[bool]":
+def data_folder_lock(data_dir: Union[str, Path], required: bool = False) -> "contextlib.AbstractContextManager[bool]":
     """The lock of one connector data folder: ``file_lock`` on ``<data_dir>/runs/.lock``.
 
     It sits inside ``runs/`` so a data folder still holds exactly ``raw``, ``records``, ``runs`` and ``state.json``. Every
-    connector's ``run`` takes it first (contract rule R17); ``rebuild``, the silver copy and the export scan ignore the file."""
-    return file_lock(Path(data_dir) / "runs" / LOCK_NAME, "data folder")
+    connector's ``run`` takes it first (contract rule R17); ``rebuild``, the silver copy and the export scan ignore the file.
+    ``required`` is passed to ``file_lock``: the job asks for it, a connector does not."""
+    return file_lock(Path(data_dir) / "runs" / LOCK_NAME, "data folder", required=required)
 
 
 # ---- auto: backfill until one has published, daily afterwards --------------------------------------------------------
@@ -179,13 +207,24 @@ def _published_manifests(data_dir: Union[str, Path]) -> Iterator[Dict[str, Any]]
             yield manifest
 
 
+def _published_nothing(manifest: Dict[str, Any]) -> bool:
+    """True when the manifest's ``published_counts`` is there and adds up to 0: the run published no record of any kind.
+
+    A manifest without the counts says nothing about it, so it is not called empty."""
+    counts = manifest.get("published_counts")
+    return isinstance(counts, dict) and sum(v for v in counts.values() if isinstance(v, int) and not isinstance(v, bool)) == 0
+
+
 def auto_command(data_dir: Union[str, Path]) -> str:
     """What ``auto`` runs in ``data_dir``: ``"backfill"`` until a backfill has published, ``"daily"`` afterwards.
 
-    A backfill has published when a file under ``runs/`` says ``"command": "backfill"`` and ``"status": "published"``.
-    ``state.json`` does not say it: a backfill that stopped half way writes one too, and the next ``auto`` must resume
-    that backfill. A published ``daily`` is not a backfill either (contract rule R18)."""
-    return "daily" if any(m.get("command") == "backfill" for m in _published_manifests(data_dir)) else "backfill"
+    A backfill has published when a file under ``runs/`` says ``"command": "backfill"`` and ``"status": "published"`` and
+    its ``published_counts`` do not add up to 0. A first backfill that published no record is not a backfill: the next
+    ``auto`` runs ``backfill`` again, so the history is not skipped for good. ``state.json`` does not say it: a backfill
+    that stopped half way writes one too, and the next ``auto`` must resume that backfill. A published ``daily`` is not a
+    backfill either (contract rule R18)."""
+    return "daily" if any(m.get("command") == "backfill" and not _published_nothing(m)
+                          for m in _published_manifests(data_dir)) else "backfill"
 
 
 def resolve_auto(data_dir: Union[str, Path], since: Any) -> Optional[str]:

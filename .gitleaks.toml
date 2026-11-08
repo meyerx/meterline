@@ -13,3 +13,10 @@ paths = [
     '''packages/meterline-gold/tests/test_done_check_G12_G14_privacy_order_manifest\.py''',
     '''docs/dev/(history/)?meterline-gold-core-SPEC-v1\.[0-9]-[0-9-]+\.md''',
 ]
+
+[[allowlists]]
+description = "A made-up value that tools/test_example_04_container.py planted in a Dockerfile line to show the key check catches it (the digits 0 to 9 and a to f, once or twice). It opens nothing. Allowed by its exact value, not by file, so a real key in that file is still found."
+targetRules = ["generic-api-key"]
+regexes = [
+    '''^0123456789abcdef(0123456789abcdef)?$''',
+]

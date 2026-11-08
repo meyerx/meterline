@@ -1,4 +1,4 @@
-schema_version,month,provider,provider_account_id,currency,usage_cost_source,cost_source_basis,usage_cost_ref,seat_cost,total_cost_ref,cost_basis_label,invoice_usage
-2.0,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,USD,62.49,consumption,69.322,451.50,520.822,"usage value, not the invoice",63.50
-2.0,2026-05,github_copilot,org:fixture-co,USD,4.80,consumption,4.80,68.75,73.55,"usage value, not the invoice",1.15
-2.0,2026-05,litellm,fixture-proxy,USD,6.75,estimate,7.447,,7.447,"estimate, not the invoice",
+schema_version,month,provider,provider_account_id,currency,usage_cost_source,cost_source_basis,usage_cost_ref,seat_cost,total_cost_ref,cost_basis_label,invoice_usage,overlap_cost_ref,month_status,is_final
+2.1,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,USD,62.49,consumption,69.322,451.50,520.822,"usage value, not the invoice",63.50,0.00,complete,true
+2.1,2026-05,github_copilot,org:fixture-co,USD,4.80,consumption,4.80,68.75,73.55,"usage value, not the invoice",1.15,0.00,complete,false
+2.1,2026-05,litellm,fixture-proxy,USD,6.75,estimate,7.447,,7.447,"estimate, not the invoice",,0.00,complete,true

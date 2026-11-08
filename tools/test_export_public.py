@@ -216,13 +216,62 @@ def test_agent_files_are_exported(tmp_path):
 
 
 @pytest.mark.parametrize("contract", ["docs/dev/meterline-integration-base-SPEC-v1.0-2026-10-29.md",
-                                      "docs/dev/meterline-improvements-1-SPEC-v1.0-2026-10-29.md"])
+                                      "docs/dev/meterline-improvements-1-SPEC-v1.0-2026-10-29.md",
+                                      "docs/dev/meterline-integrate-pr2a-SPEC-v1.0-2026-11-03.md",
+                                      "docs/dev/meterline-integrate-pr2b-SPEC-v1.0-2026-11-03.md",
+                                      "docs/dev/meterline-v03-hardening-SPEC-v1.0-2026-11-05.md"])
 def test_the_build_contract_copy_is_left_out_of_the_export(tmp_path, contract):
     assert contract in ep.EXCLUDE
     repo = _repo(tmp_path, {"README.md": "[d](docs/dev/README.md)\n", "docs/dev/README.md": "d\n", contract: "contract\n"})
     code, out = _run(tmp_path, repo, ["zzz"])
     assert code == 0
     assert sorted(os.listdir(out / "docs" / "dev")) == ["README.md"]
+
+
+def test_no_exported_file_links_the_integrate_pr2a_spec():
+    """R-9 of the integrate part 1 spec: the spec copy is left out of the export, so nothing the export keeps may link it.
+    The files that may name it are the ones the export leaves out or prunes (docs/dev is only kept where a public document
+    links into it) and the tool and test files that list it."""
+    spec = "meterline-integrate-pr2a-SPEC-v1.0-2026-11-03.md"
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    may_name_it = {"docs/dev/README.md", "docs/dev/plans/integrate-pr2a-progress.md", "tools/export_public.py",
+                   "tools/test_export_public.py", "docs/dev/" + spec}
+    listed = subprocess.run(["git", "-C", root, "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    kept = [f for f in listed if f.split("/")[0] in ep.INCLUDE and f not in ep.EXCLUDE and f.endswith(ep.LINK_SUFFIXES)
+            and f not in may_name_it and os.path.isfile(os.path.join(root, f))]
+    assert kept
+    naming = [f for f in kept if spec in open(os.path.join(root, f), encoding="utf-8", errors="replace").read()]
+    assert naming == []
+
+
+def test_no_exported_file_links_the_integrate_pr2b_spec():
+    """R-5 of the integrate part 2 spec, as R-9 of part 1: the spec copy is left out of the export, so nothing the export
+    keeps may link it. Only the files the export leaves out or prunes, and the tool and test files that list it, may name it."""
+    spec = "meterline-integrate-pr2b-SPEC-v1.0-2026-11-03.md"
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    may_name_it = {"docs/dev/README.md", "docs/dev/plans/integrate-pr2b-progress.md", "tools/export_public.py",
+                   "tools/test_export_public.py", "docs/dev/" + spec}
+    listed = subprocess.run(["git", "-C", root, "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    kept = [f for f in listed if f.split("/")[0] in ep.INCLUDE and f not in ep.EXCLUDE and f.endswith(ep.LINK_SUFFIXES)
+            and f not in may_name_it and os.path.isfile(os.path.join(root, f))]
+    assert kept
+    naming = [f for f in kept if spec in open(os.path.join(root, f), encoding="utf-8", errors="replace").read()]
+    assert naming == []
+
+
+def test_no_exported_file_links_the_v03_hardening_spec():
+    """The spec copy of the v0.3 hardening is left out of the export, so nothing the export keeps may link it, as for the
+    integrate specs. Only the files the export leaves out or prunes, and the tool and test files that list it, may name it."""
+    spec = "meterline-v03-hardening-SPEC-v1.0-2026-11-05.md"
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    may_name_it = {"docs/dev/README.md", "docs/dev/plans/v03-hardening-plan.md", "docs/dev/plans/v03-hardening-progress.md",
+                   "tools/export_public.py", "tools/test_export_public.py", "docs/dev/" + spec}
+    listed = subprocess.run(["git", "-C", root, "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    kept = [f for f in listed if f.split("/")[0] in ep.INCLUDE and f not in ep.EXCLUDE and f.endswith(ep.LINK_SUFFIXES)
+            and f not in may_name_it and os.path.isfile(os.path.join(root, f))]
+    assert kept
+    naming = [f for f in kept if spec in open(os.path.join(root, f), encoding="utf-8", errors="replace").read()]
+    assert naming == []
 
 
 # ---- MF-5: docs/dev leaves the export unless a public document links it; process traces are refused ----

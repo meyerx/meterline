@@ -7,8 +7,9 @@
         --author-name NAME --author-email EMAIL [--allow-divergence]
 
 The tree is built from an allowlist (INCLUDE below), taken from committed files only, so nothing from a
-working directory leaks in. Files outside the allowlist (the session rules file, the backlog, this tool)
-are never exported. The tree is then scanned; any hit stops the run before a commit is made:
+working directory leaks in. Files outside the allowlist (the session rules file, the backlog)
+are never exported; tools/ is on the allowlist, so this tool is exported too, with the tests that read the public tree.
+The tree is then scanned; any hit stops the run before a commit is made:
 
   - secret patterns (cloud and provider keys, tokens, private keys, bearer strings)
   - any email address whose domain is not example.com/.org/.net
@@ -48,7 +49,9 @@ Each public version after the first is a tag `export/vX.Y` on a private commit. 
 (with --tag, --author-name and --author-email) makes the export one new commit on top of the history of CLONE, a clone of the
 public repository: on a new branch named after the tag, which must not exist yet, with nothing pushed. CLONE must be on a
 branch with no uncommitted change. The same scans run first. The run then compares the HEAD of CLONE with its last
-export commit (the first commit of `git log HEAD` with an `Export-Tag:` trailer). For each path that the public side changed
+export commit (the first commit of `git log --first-parent HEAD` with an `Export-Tag:` trailer whose author email is the --author-email
+given, the maintainer's noreply address; a commit with the trailer anywhere else is ignored, with a one-line notice, so a merged
+contribution cannot move the baseline). For each path that the public side changed
 since then, the new export must equal what the public repository now holds, which is so once the change has been ported back
 to the private repository; otherwise the run lists the paths and stops, because the new commit would silently undo that
 change. --allow-divergence overrides it with a warning that lists exactly those paths. Every refusal comes before anything
@@ -87,7 +90,13 @@ EXCLUDE = ["tools/test_private_rules.py", "tools/test_commit_messages.py",
            # the build contract of auto and complete_through (auto 1b): the same reason
            "docs/dev/meterline-auto-1b-SPEC-v1.0-2026-10-31.md",
            # the build contract of dated builds, frozen months and the published folder (publish 1c): the same reason
-           "docs/dev/meterline-publish-1c-SPEC-v1.0-2026-10-31.md"]
+           "docs/dev/meterline-publish-1c-SPEC-v1.0-2026-10-31.md",
+           # the build contract of the integration pages, examples 04 and 05 and the container job (integrate part 1): the same reason
+           "docs/dev/meterline-integrate-pr2a-SPEC-v1.0-2026-11-03.md",
+           # the build contract of scenario C's page, examples 06 and 07 and the sender documents (integrate part 2): the same reason
+           "docs/dev/meterline-integrate-pr2b-SPEC-v1.0-2026-11-03.md",
+           # the build contract of the v0.3 hardening (job and gold code, release chain, documents): the same reason
+           "docs/dev/meterline-v03-hardening-SPEC-v1.0-2026-11-05.md"]
 
 MIN_GITLEAKS = (8, 30, 0)  # older gitleaks ignores [[allowlists]] in .gitleaks.toml and reports false hits
 DEV = "docs/dev/"
@@ -532,17 +541,40 @@ def check_clone(clone, tag):
                          % (tag, clone, ", ".join(taken)))
 
 
-def last_export_commit(clone):
-    """The id of the first commit of `git log HEAD` that carries an `Export-Tag:` trailer, or None."""
-    fmt = "%H%x00%(trailers:key=" + TRAILER + ",valueonly,separator=%x1f)%x00"
-    tokens = git(["--no-optional-locks", "log", "HEAD", "--format=" + fmt], clone).stdout.decode("utf-8", "replace").split("\0")
-    for i in range(0, len(tokens) - 1, 2):
-        values = [v.strip() for v in tokens[i + 1].split("\x1f") if v.strip()]
+def _trailer_commits(clone, *log_args):
+    """[(commit id, author email)] of the commits of `git log HEAD` that carry an `Export-Tag:` trailer, newest first."""
+    fmt = "%H%x00%ae%x00%(trailers:key=" + TRAILER + ",valueonly,separator=%x1f)%x00"
+    tokens = git(["--no-optional-locks", "log", "HEAD", *log_args, "--format=" + fmt], clone).stdout.decode("utf-8", "replace").split("\0")
+    found = []
+    for i in range(0, len(tokens) - 2, 3):
+        values = [v.strip() for v in tokens[i + 2].split("\x1f") if v.strip()]
         if len(values) > 1:
             raise SystemExit("commit %s of the public clone carries more than one %s: line" % (tokens[i].strip()[:12], TRAILER))
         if values:
-            return tokens[i].strip()
-    return None
+            found.append((tokens[i].strip(), tokens[i + 1].strip()))
+    return found
+
+
+def last_export_commit(clone, author_email):
+    """The id of the last export commit of the maintainer, or None: the first commit of `git log --first-parent HEAD` that
+    carries an `Export-Tag:` trailer and whose author email is `author_email` (the maintainer's noreply address).
+
+    Only the first-parent line is read, so a commit that came in on a merged branch cannot move the baseline; a commit with
+    the trailer that is not accepted (another author, or not on the first-parent line) is named in a one-line notice."""
+    first = _trailer_commits(clone, "--first-parent")
+    accepted = next((commit for commit, email in first if email.lower() == author_email.lower()), None)
+    on_line = {commit for commit, _ in first}
+    for commit, email in _trailer_commits(clone):
+        if commit == accepted:
+            continue
+        if commit not in on_line:
+            why = "it is not on the first-parent line of the history"
+        elif email.lower() != author_email.lower():
+            why = "its author is not the maintainer"
+        else:
+            continue  # an older export commit of the maintainer: not the baseline, nothing to say
+        print("notice: ignoring commit %s: it carries an %s: line, but %s, so it is not the baseline" % (commit[:12], TRAILER, why))
+    return accepted
 
 
 def report_scan(paths, ref, root, terms, hits):
@@ -582,7 +614,7 @@ def export_onto(a, message):
             print("gitleaks clean")
         fmt = git(["--no-optional-locks", "rev-parse", "--show-object-format"], clone, text=True).stdout.strip()
         head = parse_ls_tree(git(["--no-optional-locks", "ls-tree", "-r", "-z", "HEAD"], clone).stdout)
-        last_commit = last_export_commit(clone)
+        last_commit = last_export_commit(clone, a.author_email)
         if last_commit is None:
             raise SystemExit("no commit of %s carries an %s: trailer, so there is no last export to compare with: export the first "
                              "public version with --tag (for example --tag export/v0.1) and publish that" % (clone, TRAILER))

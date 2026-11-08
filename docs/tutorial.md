@@ -112,7 +112,7 @@ central/reconciliation_month.csv: 18 rows
 central/scenario_persons.csv: 476 rows
 central/scenario_summary.csv: 24 rows
 central/scenario_units.csv: 0 rows
-central/seats_month.csv: 12 rows
+central/seats_month.csv: 6 rows
 central/units.csv: 5 rows
 ```
 
@@ -158,7 +158,7 @@ audience folder, never the gold root:
 
 ```sh
 cp packages/meterline-gold/src/meterline_gold/dashboard/index.html gold/exec/
-cd gold/exec && python3 -m http.server 8000
+cd gold/exec && python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 The server prints one line and keeps running until you press Ctrl-C:

@@ -241,7 +241,7 @@
     "schema_version": {
       "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
       "enum": [
-        "2.0"
+        "2.1"
       ],
       "type": [
         "string"

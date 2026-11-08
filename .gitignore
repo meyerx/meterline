@@ -14,3 +14,8 @@ receipts/
 /gold/
 /exec-report.html
 /job-data/
+/dashboard-root/
+/warehouse-demo/
+/messages-demo/
+*.eml
+/mail-out/

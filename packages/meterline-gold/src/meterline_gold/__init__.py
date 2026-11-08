@@ -9,7 +9,7 @@ from pathlib import Path
 from meterline_gold.audiences import servable
 from meterline_gold.errors import BuildFailure, InputError
 
-GOLD_SCHEMA_VERSION = "2.0"
+GOLD_SCHEMA_VERSION = "2.1"
 try:
     __version__ = _version("meterline-gold")  # the one source is pyproject.toml
 except _NotInstalled:  # a source tree that is not installed

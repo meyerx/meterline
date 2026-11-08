@@ -14,11 +14,20 @@ What the job decides, from the exit code of each step (docs/reference/connector-
 - exit 1 (transient) of a connector is retried, once by default, after ``retry_wait_seconds`` (300 by default); nothing
   else is retried, and gold never is;
 - exit 2 (input) and exit 3 (permanent) are not retried. The step line carries an ``alert`` that says what to fix;
-- exit 4 is the job's own: gold's build failed an assertion (or any error other than a wrong input). It is on the step
-  line (``failure_kind`` ``build``) and in the job's exit code only; the connectors' exit codes stay 0 to 3;
+- exit 4 is the job's own: gold's build failed an assertion (or any error other than a wrong input), or the publish step
+  failed. It is on the step line (``failure_kind`` ``build`` for gold, ``publish`` for publish) and in the job's exit
+  code only; the connectors' exit codes stay 0 to 3. A publish skipped because gold failed in the same run carries
+  ``failure_kind`` ``skipped`` and gold's exit code, and its error names gold;
 - the job's exit code is the worst step in the order 0 < 1 < 2 < 3 < 4. A scheduler alerts on a non-zero code and a
   person acts on 2, 3 and 4.
+
+Silver, gold and publish run under one hold of ``<gold_root>/.lock``, taken before silver is staged. A second run that
+finds it held writes nothing there and says so on those three step lines (exit 1, transient). The job needs file locks:
+a platform without ``fcntl``, or a gold root where the lock file cannot be made, stops it with exit 2 before any step.
+
+Every line the job writes on stdout is one JSON object. What a connector prints for a person goes to stderr.
 """
+import contextlib
 import importlib
 import json
 import os
@@ -29,7 +38,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from meterline.run import auto_command, data_folder_lock, file_lock
+from meterline.run import LockUnavailable, auto_command, data_folder_lock, file_lock, lock_problem
 from meterline_job import publish as publish_module
 from meterline_job.config import KINDS, RESERVED_STEPS, missing_extra_message
 
@@ -44,6 +53,7 @@ ALERTS = {
     "input": "needs a person: the input is wrong (arguments, key, state file or data); running again fails the same way",
     "permanent": "needs a person: the provider refused the request; fix the key, its scope or the identifier, then run again",
     "build": "needs a person: the gold build failed; the error says which check; gold is not run again by the job",
+    "publish": "needs a person: the publish step failed; the error says which check; the previous published folder is unchanged",
 }
 
 
@@ -83,8 +93,9 @@ def run_connector(spec: Dict[str, Any], data_root: Any, transports: Any, now: An
     options = {k: v for k, v in spec.items() if k not in NOT_OPTIONS}
     command = auto_command(data_dir)
     hooks = {} if sleep is None else {"sleep": sleep}  # a test passes a no-op so a retried failure does not wait
-    result = module.run("auto", data_dir=data_dir, transport=(transports or {}).get(spec["name"]), now=now,
-                        since=date.fromisoformat(str(spec["since"])), **hooks, **options)
+    with contextlib.redirect_stdout(sys.stderr):  # what a connector prints for a person is not a JSON line
+        result = module.run("auto", data_dir=data_dir, transport=(transports or {}).get(spec["name"]), now=now,
+                            since=date.fromisoformat(str(spec["since"])), **hooks, **options)
     return command, result
 
 
@@ -102,7 +113,10 @@ def run_step(spec: Dict[str, Any], data_root: Any, transports: Any, now: Any, sl
         (sleep or time.sleep)(wait)  # only a transient failure is worth waiting for; the same command runs again
     line = dict(step=spec["name"], command=command, ok=result.ok, exit_code=result.exit_code,
                 failure_kind=result.failure_kind, http_status=result.http_status, attempts=attempts,
-                batch_id=result.batch_id, records=result.records, skipped=list(result.skipped))
+                batch_id=result.batch_id, records=result.records, skipped=list(result.skipped),
+                records_total=sum(result.records.values()))
+    if result.ok and line["records_total"] == 0:
+        line["empty"] = True  # a run that published nothing: an empty first backfill is not a backfill (rule R18)
     if result.failure_kind in ALERTS:
         line["alert"] = "%s: %s" % (result.failure_kind, ALERTS[result.failure_kind])
     return line, result.exit_code
@@ -138,7 +152,7 @@ def stage_silver(data_root: Any, names: List[str], staging: Any, locked: Optiona
         for name in names:
             if not (Path(data_root) / name).is_dir():
                 continue  # the connector has not run yet: nothing to copy, and no lock file to make in a folder that is not there
-            with data_folder_lock(Path(data_root) / name) as free:
+            with data_folder_lock(Path(data_root) / name, required=True) as free:
                 if not free:
                     if locked is not None:
                         locked.append(name)
@@ -163,6 +177,8 @@ def silver_step(config: Dict[str, Any]) -> Tuple[Dict[str, Any], int]:
     locked: List[str] = []
     try:
         silver = stage_silver(data_root, [c["name"] for c in config["connector"]], data_root / "silver", locked)
+    except LockUnavailable as exc:
+        return step_line("silver", "stage", 2, "input", error=str(exc)), 2
     except OSError as exc:
         return step_line("silver", "stage", 1, "transient", error="%s: %s" % (type(exc).__name__, exc)), 1
     if locked:
@@ -229,7 +245,12 @@ def run_job(config: Dict[str, Any], *, transports: Any = None, now: Any = None, 
     if step is not None and step not in names + list(RESERVED_STEPS):
         emit(out, **step_line(step, "run", 2, "input", error="no such step %r; the steps are: %s" % (step, ", ".join(names + list(RESERVED_STEPS)))))
         return 2
-    worst, connector_codes = 0, []
+    tail = [name for name in ("silver", "gold", "publish") if step in (None, name)]
+    problem = lock_problem(Path(config["gold_root"]) / ".lock" if tail else None)
+    if problem:  # the job's locks fail closed: no lock, no run, and nothing has been done yet
+        emit(out, **step_line("job", "start", 2, "input", error=problem))
+        return 2
+    worst, connector_codes, source_steps = 0, [], {}
     for spec in config["connector"]:
         if step not in (None, spec["name"]):
             continue
@@ -240,38 +261,49 @@ def run_job(config: Dict[str, Any], *, transports: Any = None, now: Any = None, 
         emit(out, **line)
         worst = max(worst, code)
         connector_codes.append(code)
-    silver_code = None
-    if step in (None, "silver"):
-        line, silver_code = silver_step(config)
-        emit(out, **line)
-        worst = max(worst, silver_code)
-    wanted = [name for name in ("gold", "publish") if step in (None, name)]
-    if wanted:
-        worst = max(worst, _gold_and_publish(config, wanted, day, clock, out, step is None and not any(connector_codes) and not silver_code))
+        source_steps[spec["name"]] = (code == 0, line["failure_kind"])
+    if tail:
+        worst = max(worst, _silver_gold_publish(config, tail, day, clock, out, step is None and not any(connector_codes),
+                                                source_steps))
     return worst
 
 
-def _gold_and_publish(config: Dict[str, Any], wanted: List[str], day: date, clock: Any, out: Any, run_complete: bool) -> int:
-    """The gold step and the publish step under one hold of ``<gold_root>/.lock``, so no other run's build lands between."""
+def _silver_gold_publish(config: Dict[str, Any], tail: List[str], day: date, clock: Any, out: Any, connectors_ok: bool,
+                         source_steps: Optional[Dict[str, Tuple[bool, str]]] = None) -> int:
+    """The silver, gold and publish steps under one hold of ``<gold_root>/.lock``, so no other run's silver, build or
+    publication lands between them. ``connectors_ok``: the run was whole and every connector step succeeded."""
     worst = 0
-    with file_lock(Path(config["gold_root"]) / ".lock", "gold folder") as free:
-        if not free:
-            for name in wanted:
-                what = "nothing was built" if name == "gold" else "nothing was published"
-                emit(out, **step_line(name, "build" if name == "gold" else "publish", 1, "transient",
-                                      error="the gold folder is in use by another run; %s" % what,
-                                      **(dict(build=None, retry=False, data_through=None) if name == "gold" else {})))
-            return 1
-        built_ok = True
-        if "gold" in wanted:
-            line, code = gold_step(config, day)
-            emit(out, **line)
-            worst, built_ok = code, code == 0
-        if "publish" in wanted:
-            if built_ok:
-                line, code = publish_step(config, publish_module.Context(today=day, now=clock, run_complete=run_complete))
-            else:
-                line, code = step_line("publish", "publish", 1, "transient", error="gold did not build in this run; nothing was published"), 1
-            emit(out, **line)
-            worst = max(worst, code)
+    try:
+        with file_lock(Path(config["gold_root"]) / ".lock", "gold folder", required=True) as free:
+            if not free:
+                for name in tail:
+                    what = {"silver": "nothing was staged", "gold": "nothing was built", "publish": "nothing was published"}[name]
+                    more = dict(build=None, retry=False, data_through=None) if name == "gold" else {}
+                    emit(out, **step_line(name, {"silver": "stage", "gold": "build", "publish": "publish"}[name], 1, "transient",
+                                          error="the gold folder is in use by another run; %s" % what, **more))
+                return 1
+            silver_code = 0
+            if "silver" in tail:
+                line, silver_code = silver_step(config)
+                emit(out, **line)
+                worst = silver_code
+            built_code = 0
+            if "gold" in tail:
+                line, built_code = gold_step(config, day)
+                emit(out, **line)
+                worst = max(worst, built_code)
+            if "publish" in tail:
+                if built_code:
+                    line = step_line("publish", "publish", built_code, "skipped",
+                                     error="gold failed in this run (exit %d); nothing was published" % built_code)
+                    code = built_code
+                else:
+                    line, code = publish_step(config, publish_module.Context(today=day, now=clock,
+                                                                              run_complete=connectors_ok and not silver_code,
+                                                                              source_steps=dict(source_steps or {})))
+                emit(out, **line)
+                worst = max(worst, code)
+    except LockUnavailable as exc:
+        emit(out, **step_line("job", "lock", 2, "input", error=str(exc)))
+        return max(worst, 2)
     return worst

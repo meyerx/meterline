@@ -1,8 +1,11 @@
 """B5: the examples run in CI on simulated data and recorded shapes, and the export ships them.
 
-Each example folder has a README with goal, commands, expected output and what it reads; examples 01 and 02 are run here
-on a build of the ``tiny`` preset; example 03 runs the meterline-job package, whose tests (packages/meterline-job/tests) CI runs; the
-CI job runs the "Run it" block of every example README.
+Each example folder has a README with goal, commands, expected output and what it reads; examples 01, 02 and 05 are run here
+on a build of the ``tiny`` preset; example 03 runs the meterline-job package, whose tests (packages/meterline-job/tests) CI runs;
+example 04 is a container that the CI container job builds and runs (tools/test_example_04_container.py checks its files);
+examples 06 and 07 (a DuckDB warehouse layout, per-person messages) have their own tests (tools/test_example_06_warehouse.py,
+tools/test_example_07_messages.py); the
+CI job runs the "Run it" block of every example README that needs no container.
 
 Run: python3 -m pytest -q tools/test_examples.py
 """
@@ -31,8 +34,8 @@ EXAMPLES = sorted(p.name for p in (ROOT / "examples").iterdir() if p.is_dir())
 KEY = "a-key-of-at-least-32-bytes-that-you-keep-out-of-git"
 
 
-def test_the_three_examples_exist():
-    assert EXAMPLES == ["01-sim-to-kpis", "02-exec-report", "03-daily-job"]
+def test_the_examples_exist():
+    assert EXAMPLES == ["01-sim-to-kpis", "02-exec-report", "03-daily-job", "04-container", "05-dashboard", "06-warehouse-duckdb", "07-person-messages"]
 
 
 @pytest.mark.parametrize("example", EXAMPLES)
@@ -80,6 +83,22 @@ def test_example_02_refuses_a_file_that_is_not_servable(tiny):
             report.read_served(tiny, "manifest.json")
     finally:
         sys.path.pop(0)
+
+
+def test_done_check_example_05_renders_one_audience_and_exits_0(tiny, tmp_path):
+    # the gold root of the job has a ``published`` link; the example reads nothing else
+    (tmp_path / "published").symlink_to(tiny)
+    manager = sorted(p.name for p in (tiny / "manager").iterdir())[0]
+    done = subprocess.run([sys.executable, str(ROOT / "examples" / "05-dashboard" / "dashboard.py"), str(tmp_path),
+                           "--audience", "manager:" + manager, "--check"], capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "ok: rendered manager/" + manager
+
+
+def test_example_05_exits_2_when_published_is_absent(tmp_path):
+    done = subprocess.run([sys.executable, str(ROOT / "examples" / "05-dashboard" / "dashboard.py"), str(tmp_path),
+                           "--audience", "exec", "--check"], capture_output=True, text=True)
+    assert done.returncode == 2 and "published/ is absent" in done.stderr
 
 
 def test_ci_runs_the_run_it_block_of_every_example():

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-23zoIimoOa3EYNAmtOwPj36xVOhyDRWlGYPA/Qqc14Q='; style-src 'sha256-T/NhoF//Lbzz4G4yVP4R/y5TxfuZQ5hXQcKBunzaoR0='; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-BfwZ77Z8QnJNdjDHVqTggKNDDTyaar3Jr5BUYAQbsmQ='; style-src 'sha256-T/NhoF//Lbzz4G4yVP4R/y5TxfuZQ5hXQcKBunzaoR0='; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>meterline gold: example dashboard</title>
 <style>
@@ -72,7 +72,7 @@ var KNOWN = {
 // empty one of these shows as "hidden"; on a row with hidden = false an empty value stays blank (it means none).
 var COVERED = {
   costs_month: ["usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "cost_basis_label",
-                "invoice_usage"],
+                "invoice_usage", "overlap_cost_ref"],
   pools_month: ["gross_credits", "pool_used_credits", "overage_credits", "overage_amount", "pool_used_share",
                 "budget_state", "budget_crossed_on"],
   seats_month: ["active_seats", "idle_seats"],
@@ -84,7 +84,7 @@ var COVERED = {
 // The columns that hold money, per file (the money columns of the writer's schemas, spec 6). Their header shows the
 // currency of the folder, read from the `currency` column of a file that has one (spec 6.5 to 6.8: the reference currency).
 var MONEY = {
-  "costs_month": ["usage_cost_source", "usage_cost_ref", "seat_cost", "total_cost_ref", "invoice_usage"],
+  "costs_month": ["usage_cost_source", "usage_cost_ref", "seat_cost", "total_cost_ref", "invoice_usage", "overlap_cost_ref"],
   "seats_month": ["seat_price", "seat_cost"],
   "pools_month": ["overage_amount", "budget_amount"],
   "reconciliation_month": ["actor_cost_source", "org_cost_source", "unallocated_cost_source", "cost_ref", "ref_vs_source_gap", "invoice_usage", "invoice_usage_gap", "invoice_seats", "invoice_seats_gap"],

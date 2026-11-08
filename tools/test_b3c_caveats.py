@@ -29,13 +29,15 @@ COOKBOOK = section(read("docs", "how-to", "finops-kpis.md"), "Billed, consumptio
 ADMIN = read("packages", "meterline-anthropic-admin", "README.md")
 
 
-def test_the_example_price_list_still_has_a_provider_wide_anthropic_seat_line():
+def test_the_example_price_list_keeps_the_provider_wide_anthropic_seat_line_commented_out():
     yaml = pytest.importorskip("yaml")
     base = os.path.join(ROOT, "packages", "meterline-gold", "src", "meterline_gold", "examples", "prices.example.yaml")
     with open(base, encoding="utf-8") as fh:
-        prices = yaml.safe_load(fh)
-    line = next(s for s in prices["seats"] if s["provider"] == "anthropic")
-    assert line["provider_account_id"] is None and str(line["per_month"]) == "27.00"
+        text = fh.read()
+    assert not [s for s in yaml.safe_load(text)["seats"] if s["provider"] == "anthropic"]  # nothing active
+    commented = [line for line in text.splitlines() if line.lstrip().startswith("# - {provider: anthropic")]
+    assert len(commented) == 1 and "provider_account_id: null" in commented[0] and 'per_month: "27.00"' in commented[0]
+    assert "Commented out on purpose" in text
 
 
 @pytest.mark.parametrize("name,text", [("example 03 README", EXAMPLE_03), ("cost cookbook", COOKBOOK)])

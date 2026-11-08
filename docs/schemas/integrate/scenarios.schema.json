@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/meyerx/meterline/blob/main/docs/schemas/integrate/scenarios.schema.json",
+  "title": "meterline integration scenarios",
+  "description": "docs/integrate/scenarios.yaml: the integration scenarios with the maturity mark of every step. Marks, from most to least mature: verified, built, pattern, new code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["scenarios"],
+  "properties": {
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/scenario"}
+    }
+  },
+  "$defs": {
+    "mark": {
+      "description": "How mature meterline is for the step.",
+      "enum": ["verified", "built", "pattern", "new code"]
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "for", "gold_runs", "read_by", "least_mature", "page", "steps"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[A-Z]$", "description": "One capital letter."},
+        "title": {"type": "string", "minLength": 1},
+        "for": {"type": "string", "minLength": 1, "description": "Who the scenario is for."},
+        "gold_runs": {"type": "string", "minLength": 1, "description": "Where gold is computed."},
+        "read_by": {"type": "string", "minLength": 1, "description": "Where people read the figures."},
+        "least_mature": {"$ref": "#/$defs/mark", "description": "The last mark, in the order verified, built, pattern, new code, among the steps."},
+        "page": {"type": "string", "pattern": "^docs/integrate/[a-z0-9-]+\\.md$", "description": "The scenario page, relative to the repository root."},
+        "steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/step"}}
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["how", "mark", "example"],
+      "properties": {
+        "how": {"type": "string", "minLength": 1, "description": "What the step is and how it is done."},
+        "mark": {"$ref": "#/$defs/mark"},
+        "example": {"type": ["string", "null"], "pattern": "^examples/[0-9]{2}-[a-z0-9-]+$", "description": "The example folder that shows the step, or null."}
+      }
+    }
+  }
+}

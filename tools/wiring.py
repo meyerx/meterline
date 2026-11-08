@@ -512,6 +512,11 @@ def _excuse(reason, *tests):
 
 
 NOT_WIRING = {
+    **_excuse("reads the package folders to find the console scripts and the example folders that CI runs, not to check that a package is wired in",
+              "test_integrate_docs.py::test_every_step_has_a_mark_and_a_built_step_names_something_that_runs",
+              "test_integrate_docs.py::test_negative_control_a_d_step_marked_built_is_caught",
+              "test_integrate_docs.py::test_the_yaml_steps_follow_the_same_rules_as_the_pages",
+              "test_example_04_container.py::test_the_dockerfile_builds_from_wheels_made_here_and_runs_as_the_jobs_entry_point"),
     **_excuse("checks the package files the template writes (README outline, links, build); a package made by new_connector.py passes them",
               "test_package_readmes.py::test_build_then_twine_check_passes",
               "test_package_readmes.py::test_every_link_into_the_repository_names_an_existing_path",
@@ -534,6 +539,12 @@ NOT_WIRING = {
               "test_release_hygiene.py::test_every_package_declares_the_licence_and_ships_it",
               "test_release_hygiene.py::test_every_package_folder_is_found_and_whole"),
     **_excuse("checks the pyproject.toml the template writes (metadata, bounds, extras, imports); a package made by new_connector.py passes them",
+              "test_dependency_bounds.py::test_every_requirement_on_another_meterline_package_has_both_bounds",
+              "test_dependency_bounds.py::test_the_lower_bound_is_not_above_the_version_the_tree_declares",
+              "test_dependency_bounds.py::test_the_packages_do_depend_on_each_other",
+              "test_pypi_metadata.py::test_every_package_links_the_documentation",
+              "test_pypi_metadata.py::test_the_python_classifiers_are_exactly_the_versions_ci_runs",
+              "test_release_workflow.py::test_build_system_requires_pins_setuptools_to_the_version_of_the_constraints",
               "test_packaging_metadata.py::test_a_package_at_1_0_or_later_is_not_alpha",
               "test_packaging_metadata.py::test_a_test_that_needs_an_extra_the_base_install_lacks_skips_instead_of_erroring",
               "test_packaging_metadata.py::test_dependents_require_the_meterline_that_has_the_names_they_import",
@@ -550,6 +561,8 @@ NOT_WIRING = {
               "test_security_privacy_docs.py::test_every_security_suppression_states_its_reason",
               "test_security_privacy_docs.py::test_security_lint_of_package_sources_is_clean_or_justified",
               "test_no_retired_public_names.py::test_no_retired_public_names_in_the_schemas"),
+    **_excuse("reads the environment variables of the packages' sources to check the example environment file lists them all; checks no place a package must appear in",
+              "test_operate_watch.py::test_the_environment_example_lists_every_variable_with_no_value"),
     **_excuse("a negative control or a self-test of a check: it builds its input from the package list and checks no place",
               "test_connector_contract_docs.py::test_there_are_connectors_to_check",
               "test_connector_contract_docs.py::test_no_tools_test_hard_codes_the_package_list",

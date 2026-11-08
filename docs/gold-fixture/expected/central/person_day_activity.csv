@@ -1,5 +1,5 @@
 schema_version,day,month,provider,provider_account_id,person_key,actor_key,identity_status,product,sessions,messages,requests,suggestions_shown,suggestions_accepted,lines_added,lines_removed,edits_accepted,edits_rejected,commits,pull_requests,source_records
-2.0,2026-05-04,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_c34d136a96085b79,,resolved,chat,0,10,,,,0,0,0,0,0,0,1
-2.0,2026-05-20,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_745d1f9a98e70c61,,resolved,chat,0,5,,,,0,0,0,0,0,0,1
-2.0,2026-05-20,2026-05,github_copilot,org:fixture-co,pk_ba750aaeaf88d602,,resolved,code_completion,,0,,40,10,25,0,,,,,1
-2.0,2026-05-22,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_5339008b9a085e94,,resolved,chat,0,3,,,,0,0,0,0,0,0,1
+2.1,2026-05-04,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_c34d136a96085b79,,resolved,chat,0,10,,,,0,0,0,0,0,0,1
+2.1,2026-05-20,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_745d1f9a98e70c61,,resolved,chat,0,5,,,,0,0,0,0,0,0,1
+2.1,2026-05-20,2026-05,github_copilot,org:fixture-co,pk_ba750aaeaf88d602,,resolved,code_completion,,0,,40,10,25,0,,,,,1
+2.1,2026-05-22,2026-05,anthropic,00000000-0000-0000-0000-00000000f001,pk_5339008b9a085e94,,resolved,chat,0,3,,,,0,0,0,0,0,0,1

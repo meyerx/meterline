@@ -1,0 +1,149 @@
+# The five integration scenarios, for a program or an agent to read. The pages in this folder say the same in prose;
+# tools/test_integrate_docs.py holds the two together. Marks, from most to least mature: verified, built, pattern, new code.
+# A step marked built or verified names an example that CI runs or a console script of a package.
+scenarios:
+  - id: A
+    title: One machine
+    for: trying meterline, or a small team
+    gold_runs: DuckDB, on the machine
+    read_by: the reference dashboard, a notebook or the CSV files
+    least_mature: built
+    page: docs/integrate/a-one-machine.md
+    steps:
+      - how: pip install "meterline-job[all]" in a virtual environment, which installs the meterline-job command and the connectors
+        mark: built
+        example: null
+      - how: cron or a systemd timer runs meterline-job run job.toml once a day
+        mark: built
+        example: examples/03-daily-job
+      - how: the lock per data folder in meterline-job skips a folder that another run holds
+        mark: built
+        example: null
+      - how: meterline-job run job.toml, configured as in example 03 (connectors with auto, silver step, gold, publish)
+        mark: built
+        example: examples/03-daily-job
+      - how: the reference dashboard over published/<audience>, a notebook, or the CSV files
+        mark: built
+        example: examples/05-dashboard
+  - id: B
+    title: Kubernetes and a Python dashboard
+    for: a platform team that runs containers
+    gold_runs: DuckDB, in a scheduled container
+    read_by: a Python dashboard over the published folder
+    least_mature: pattern
+    page: docs/integrate/b-kubernetes.md
+    steps:
+      - how: build the Dockerfile of example 04 from the repository root; meterline publishes no image
+        mark: built
+        example: examples/04-container
+      - how: push the image to the organisation's registry
+        mark: pattern
+        example: null
+      - how: the CronJob of example 04, with concurrencyPolicy Forbid
+        mark: pattern
+        example: examples/04-container
+      - how: one persistent volume for the data folders and one for the whole gold root
+        mark: pattern
+        example: examples/04-container
+      - how: provider keys and METERLINE_GOLD_KEY from Kubernetes secrets, as environment variables
+        mark: pattern
+        example: examples/04-container
+      - how: meterline-job run CONFIG in the container (connectors with auto, silver step, gold, publish)
+        mark: built
+        example: examples/04-container
+      - how: the process of example 05, one per audience, or an app of your own that reads published/<audience>
+        mark: built
+        example: examples/05-dashboard
+      - how: sign-in through single sign-on, mapped to a person_key with delivery/directory.csv, then the process of that audience
+        mark: pattern
+        example: null
+  - id: C
+    title: Containers, a data lake and a warehouse
+    for: an organisation with a data lake and a warehouse
+    gold_runs: DuckDB, in a scheduled container
+    read_by: the warehouse, through a Python dashboard or a BI tool
+    least_mature: pattern
+    page: docs/integrate/c-lake-and-warehouse.md
+    steps:
+      - how: a Kubernetes CronJob, or an ECS task started by EventBridge Scheduler
+        mark: pattern
+        example: null
+      - how: a file system that outlives the task, such as EFS, for the data folders and the gold root
+        mark: pattern
+        example: null
+      - how: meterline-job run CONFIG with parquet = true (connectors with auto, silver step, gold, publish), in the image of example 04
+        mark: built
+        example: examples/04-container
+      - how: the warehouse layout on a local stand-in, one database file per audience, a restricted file for the connection-to-key table, and a load that replaces what the last build left
+        mark: built
+        example: examples/06-warehouse-duckdb
+      - how: one message per person written as .eml files from published/person/<key>/ and the delivery directory, with sending locked behind two switches
+        mark: built
+        example: examples/07-person-messages
+      - how: copy each published build's Parquet files into Iceberg tables or a bucket on S3, once per build date, with the S3 excerpt
+        mark: pattern
+        example: null
+      - how: one schema per audience in Snowflake, tables replaced at each build, secure views and grants, with the Snowflake excerpt
+        mark: pattern
+        example: null
+      - how: Streamlit, in Snowflake or in a container, or any BI tool
+        mark: pattern
+        example: null
+      - how: on a non-zero exit of the job, a message to an SNS topic through the scheduler or a short wrapper
+        mark: pattern
+        example: null
+      - how: send the files of example 07 through SES, with the SES excerpt
+        mark: pattern
+        example: null
+  - id: D
+    title: Gold computed in the warehouse
+    for: an organisation that may run no batch outside its warehouse
+    gold_runs: the warehouse
+    read_by: the warehouse
+    least_mature: new code
+    page: docs/integrate/d-gold-in-warehouse.md
+    steps:
+      - how: bulk-load the silver records that stage 0 has validated and hashed into warehouse tables
+        mark: pattern
+        example: null
+      - how: keep stage 0 in Python, so that no raw identifier reaches the warehouse
+        mark: new code
+        example: null
+      - how: rewrite the macros, the aggregates, the list and map types and the recursive queries for the engine
+        mark: new code
+        example: null
+      - how: port the places where Python reaches the engine
+        mark: new code
+        example: null
+      - how: replace the two checks that read files
+        mark: new code
+        example: null
+      - how: replace the folder outputs with tables
+        mark: new code
+        example: null
+      - how: build the gold fixture on the engine and compare it with the expected files
+        mark: new code
+        example: null
+      - how: a row access policy keyed on the reader, over the manager and person tables
+        mark: pattern
+        example: null
+  - id: E
+    title: Agents over gold
+    for: teams whose AI agents build FinOps views
+    gold_runs: any of A or B
+    read_by: an MCP server over gold
+    least_mature: new code
+    page: docs/integrate/e-agents.md
+    steps:
+      - how: run gold as in A or B; the server reads published/<audience> and never builds/
+        mark: pattern
+        example: null
+      - how: a read-only MCP server that lists the datasets, reads one with its schema and applies servable() to every request
+        mark: new code
+        example: null
+      - how: start one server per audience, or map an agent's identity to an audience
+        mark: new code
+        example: null
+      - how: decide which audiences an agent may be given; central/ is for the central team only
+        mark: pattern
+        example: null

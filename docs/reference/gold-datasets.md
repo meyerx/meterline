@@ -175,8 +175,9 @@ The columns of the central form, in file order:
 | `cost_ref_status` | text | no | How cost_ref was priced: priced, included, unpriced or unknown_model. |
 | `is_final` | flag | no | True when the provider will no longer revise the figure. |
 | `source_records` | count | no | Number of silver records merged into the row. |
+| `model_provider` | text | yes | Provider that served the model, when it differs from provider (a proxy such as litellm routes calls to a provider); mixed if the merged records differ; empty when the record does not say. |
 
-**Which cost column to sum.** Sum `cost_ref` to total or compare across providers and models: it prices every row from one price list in one currency, and is empty when a record could not be priced (see `cost_ref_status`). Sum `cost_source` only within one `cost_source_basis` and one `cost_source_currency`: billed, consumption and estimated amounts do not add up.
+**Which cost column to sum.** `model_provider` is the provider that served the model, where a proxy routes calls on. Sum `cost_ref` to total or compare across providers and models: it prices every row from one price list in one currency, and is empty when a record could not be priced (see `cost_ref_status`). Sum `cost_source` only within one `cost_source_basis` and one `cost_source_currency`: billed, consumption and estimated amounts do not add up.
 
 ## `person_day_activity`
 
@@ -288,6 +289,8 @@ The columns of the central form, in file order:
 | `seat_price` | currency | yes | Price per seat per month from the price list. |
 | `seat_cost` | currency | yes | Seat fee: seats_billed times seat_price. A fee, not usage. |
 | `currency` | text | no | ISO 4217 reference currency of the row. |
+| `month_status` | text | no | complete for a finished month, running for the month in progress. |
+| `is_final` | flag | no | True when the month is complete. The seat fee of a running month is the full month's fee. |
 
 The exec form (`gold-dataset-exec-seats_month.schema.json`) adds `hidden`; withholds values in `active_seats`, `idle_seats` and says so in `hidden`.
 
@@ -322,7 +325,8 @@ The columns of the central form, in file order:
 | `budget_state` | text | no | none without a budget, crossed once overage passed it, otherwise within. |
 | `budget_crossed_on` | date | yes | First day on which the overage passed the budget. |
 | `currency` | text | no | ISO 4217 reference currency of the row. |
-| `is_final` | flag | no | True when the provider will no longer revise the figure. |
+| `is_final` | flag | no | True when the month is complete and the provider will no longer revise the billing rows. |
+| `month_status` | text | no | complete for a finished month, running for the month in progress. |
 
 The exec form (`gold-dataset-exec-pools_month.schema.json`) adds `hidden`; withholds values in `gross_credits`, `pool_used_credits`, `overage_credits`, `overage_amount`, `pool_used_share`, `budget_state`, `budget_crossed_on` and says so in `hidden`.
 
@@ -353,10 +357,13 @@ The columns of the central form, in file order:
 | `total_cost_ref` | currency | no | usage_cost_ref plus seat_cost. |
 | `cost_basis_label` | text | yes | Plain-language label of the basis of usage_cost_source. |
 | `invoice_usage` | currency | yes | Invoiced usage amount from the invoice file, if one was given. |
+| `overlap_cost_ref` | currency | no | Part of usage_cost_ref that a proxy routed to a provider whose own connector is also in this build: those calls are in both providers' rows. 0 for every other row; empty where the row is hidden. |
+| `month_status` | text | no | complete for a finished month, running for the month in progress. |
+| `is_final` | flag | no | True when the month is complete and every usage row of it is final. |
 
-The exec form (`gold-dataset-exec-costs_month.schema.json`) adds `hidden`; withholds values in `usage_cost_source`, `cost_source_basis`, `usage_cost_ref`, `total_cost_ref` and says so in `hidden`.
+The exec form (`gold-dataset-exec-costs_month.schema.json`) adds `hidden`; withholds values in `usage_cost_source`, `cost_source_basis`, `usage_cost_ref`, `total_cost_ref`, `overlap_cost_ref` and says so in `hidden`.
 
-**Which cost column to sum.** For spend by provider and month sum `usage_cost_ref` (reference cost) or `total_cost_ref` (usage plus seats). Never add `seat_cost` to `total_cost_ref`: it is already inside. Sum `usage_cost_source` only within one `cost_source_basis`.
+**Which cost column to sum.** For spend by provider and month sum `usage_cost_ref` (reference cost) or `total_cost_ref` (usage plus seats). Never add `seat_cost` to `total_cost_ref`: it is already inside. Sum `usage_cost_source` only within one `cost_source_basis`. A proxy row's `overlap_cost_ref` is the part of its cost that another provider's row also holds: subtract it before adding the two. A row with `is_final` false belongs to a running month, whose `seat_cost` is the full month's fee.
 
 ## `reconciliation_month`
 
@@ -596,16 +603,16 @@ The columns of the central form, in file order:
 |---|---|---|---|
 | `schema_version` | text | no | GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row. |
 | `day` | date | no | Calendar day, YYYY-MM-DD (UTC). |
-| `event_type` | text | no | breaker, spike or scenario_alert. |
+| `event_type` | text | no | breaker, spike, scenario_alert or proxy_overlap. |
 | `scenario_id` | key | yes | Id of the shadow scenario from the policy. |
-| `subject_kind` | text | no | person or unit. |
-| `subject_key` | key | no | person_key or unit_id, as subject_kind says. |
-| `value` | currency | no | Day cost or position that fired the event. |
+| `subject_kind` | text | no | person, unit or proxy. |
+| `subject_key` | key | no | person_key or unit_id, as subject_kind says; for proxy, the proxy's provider and the provider it routes to, joined by a slash. |
+| `value` | currency | no | Day cost or position that fired the event; for proxy_overlap, the amount counted twice. |
 | `threshold` | currency | no | Limit the event crossed, in the reference currency. |
 | `trailing_sum` | currency | yes | Sum of the day costs in the spike's trailing window; empty on other events. |
 | `trailing_days` | count | yes | Days in the spike's trailing window; empty on other events. |
 
-**Which cost column to sum.** `value` and `threshold` are day or position costs; do not sum events.
+**Which cost column to sum.** `value` and `threshold` are day or position costs; do not sum events. A `proxy_overlap` event carries the amount that two providers' rows both count.
 
 ## `named_exceptions`
 

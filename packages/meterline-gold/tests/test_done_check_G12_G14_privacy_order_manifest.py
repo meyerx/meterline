@@ -134,12 +134,12 @@ def test_done_check_G14_schema_version_and_manifest(fixture_out, tmp_path):
     for path in files:
         header, rows = read_csv(path)
         assert header[0] == "schema_version", path
-        assert all(r[0] == "2.0" for r in rows), path
+        assert all(r[0] == "2.1" for r in rows), path
     assert manifest_problems(fixture_out) == []
     manifest = json.loads((fixture_out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["key_check"] == FIXTURE_KEY_CHECK
-    assert manifest["gold_schema_version"] == "2.0"
-    assert manifest["generator"] == {"name": "meterline-gold", "version": "0.2.0"}
+    assert manifest["gold_schema_version"] == "2.1"
+    assert manifest["generator"] == {"name": "meterline-gold", "version": "0.3.0"}
     assert manifest["as_of"] == "2026-06-10"
     assert manifest["data_through"] == "2026-05-31"
     assert manifest["months"] == ["2026-05"]

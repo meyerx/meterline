@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "meterline"
-version = "0.3.0"
+version = "0.3.1"
 description = "A common record format for AI usage data, with JSONL and Parquet writers."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
@@ -27,6 +27,7 @@ dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/meyerx/meterline"
+Documentation = "https://github.com/meyerx/meterline/blob/main/docs/README.md"
 Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline"
 Issues = "https://github.com/meyerx/meterline/issues"
 Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"

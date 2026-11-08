@@ -8,7 +8,7 @@ SELECT row_number() OVER (ORDER BY u.provider, u.provider_account_id, u.scope, u
        u.provider, u.provider_account_id, u.period_start, u.actor_kind, u.product, u.model,
        u.tokens_input_uncached, u.tokens_cache_read, u.tokens_cache_write, u.tokens_cache_write_5m,
        u.tokens_cache_write_1h, u.tokens_input_total, u.tokens_output, u.requests, u.ai_credit, u.cost,
-       u.currency, u.cost_basis, u.is_final,
+       u.currency, u.cost_basis, u.is_final, u.model_provider,
        CASE WHEN u.actor_kind IN ('unassigned', 'service_account', 'api_key') THEN 'non_person'
             WHEN i.method = 'non_person' THEN 'non_person'
             WHEN i.person_key IS NOT NULL THEN 'resolved'
@@ -121,7 +121,8 @@ SELECT period_start AS day,
             WHEN bool_or(cost_ref_status = 'priced') THEN 'priced'
             ELSE 'included' END AS cost_ref_status,
        bool_and(is_final) AS is_final,
-       count(*) AS source_records
+       count(*) AS source_records,
+       CASE WHEN count(DISTINCT model_provider) > 1 THEN 'mixed' ELSE min(model_provider) END AS model_provider
 FROM usage_priced
 GROUP BY period_start, month_label(period_start), provider, provider_account_id, person_key, actor_key, identity_status,
          product, model;
@@ -171,7 +172,7 @@ GROUP BY period_start, month_label(period_start), provider, provider_account_id,
 SELECT day, month, provider, provider_account_id, person_key, actor_key, identity_status, identity_method, actor_kind,
        product, model, model_tier, requests, tokens_input_uncached, tokens_cache_read, tokens_cache_write,
        tokens_cache_write_5m, tokens_cache_write_1h, tokens_input_total, tokens_output, credits, cost_source,
-       cost_source_basis, cost_source_currency, cost_ref, cost_ref_status, is_final, source_records
+       cost_source_basis, cost_source_currency, cost_ref, cost_ref_status, is_final, source_records, model_provider
 FROM person_day
 ORDER BY day, provider, provider_account_id, person_key NULLS FIRST, actor_key NULLS FIRST, product, model;
 

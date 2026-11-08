@@ -6,7 +6,7 @@ Python 3.10 or later. Layers: **bronze** (raw responses), **silver** (the common
 
 ## Evidence level
 
-Evidence levels as of 2026-10-30. The three levels are defined in [docs/glossary.md](docs/glossary.md#evidence-levels).
+Levels: [docs/glossary.md](docs/glossary.md#evidence-levels). The date of the last live run is in the Status paragraph of [README.md](README.md).
 
 - `meterline-anthropic-admin`: verified live on a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen).
 - `meterline-litellm`: built against documented shapes and checked against LiteLLM v1.106.6's own route code.
@@ -17,10 +17,11 @@ No other connector has run against a live account. A real response may differ fr
 
 ## Install
 
-Run from the repository root, in a virtual environment (`python3 -m venv .venv`). Upgrade pip first, with `.venv/bin/python -m pip install --upgrade pip`: an older pip, such as the one bundled with early Python 3.10 releases, cannot do an editable install.
+Run from the repository root, in a virtual environment (`python3 -m venv .venv`). Upgrade pip first (`.venv/bin/python -m pip install --upgrade pip`): an older pip cannot do an editable install.
 
 - Simulated data to gold, and everything offline: `.venv/bin/python -m pip install -e packages/meterline -e packages/meterline-sim -e packages/meterline-gold`
-- A connector on a real account: `.venv/bin/python -m pip install -e packages/meterline -e packages/meterline-anthropic` (or `-anthropic-admin`, `-litellm`, `-copilot`). Add `-e "packages/meterline-anthropic[parquet]"` for Parquet output.
+- A connector on a real account: `.venv/bin/python -m pip install -e packages/meterline -e packages/meterline-anthropic` (or `-anthropic-admin`, `-litellm`, `-copilot`). Add `[parquet]` to the package for Parquet output.
+- The daily job: add `-e packages/meterline-job` and the connectors it runs, or `pip install "meterline-job[all]"`; see `packages/meterline-job/README.md`.
 - The test suites: install every package with its `dev` extra, as the Quick start in `README.md` shows.
 
 ## Commands: offline and provider
@@ -28,25 +29,33 @@ Run from the repository root, in a virtual environment (`python3 -m venv .venv`)
 Safe offline (no key, no network):
 
 - `meterline-sim generate --preset tiny --seed 7 --out sim-out` writes an invented organisation and its silver records.
-- `meterline-gold build --silver SILVER --org-files ORG --policy POLICY --prices PRICES --out gold` builds the gold folder. It needs `METERLINE_GOLD_KEY`, a key of at least 32 bytes that you invent and keep out of git. The exact call is in the README section "Try it without a key".
+- `meterline-gold build --silver SILVER --org-files ORG --policy POLICY --prices PRICES --out gold` builds the gold folder. It needs `METERLINE_GOLD_KEY`, a key of at least 32 bytes that you invent and keep out of git. The call is in the README section "Try it without a key".
 - `python -m pytest -q ...` (see Tests).
 
 These call a provider and need that provider's key in the environment. The other connectors need read access only; the Anthropic Admin key is not read-only (it can also manage members, workspaces and API keys; see the README of `meterline-anthropic-admin`). Do not run them without the owner's say-so:
 
 - `meterline-anthropic`, `meterline-anthropic-admin`, `meterline-litellm`, `meterline-copilot`, each with `backfill`, `daily` or `rebuild`. Only `rebuild` makes no call: it rebuilds records from the stored raw responses.
+- `meterline-job run job.toml` runs the connectors, silver, gold and publish, one JSON status line per step.
 
 ## Examples
 
 - `examples/01-sim-to-kpis/`: simulated data to the FinOps KPIs with DuckDB (`docs/how-to/finops-kpis.md` explains them).
-- `examples/02-exec-report/`: a stdlib-only static HTML report from `exec/` only, checking `meterline_gold.servable` for every file: the pattern to copy for an audience view.
-- `examples/03-daily-job/`: every connector through its Python entry point (`run(command, data_dir=..., credentials=...)`, with a public fake in `<package>.testing`), then gold, as JSON status lines with `failure_kind`; `docs/how-to/operate-daily.md` covers running it for real.
+- `examples/02-exec-report/`: a stdlib-only static HTML report from `exec/` only, checking `meterline_gold.servable` for every file.
+- `examples/05-dashboard/`: a stdlib-only dashboard that serves one audience folder of `published/` and refuses every path `meterline_gold.servable` refuses; `--check` renders once.
+- `examples/04-container/`: a Dockerfile for `meterline-job`, a Kubernetes CronJob and an ECS task definition; no key in the image; the image also carries example 05's dashboard.
+- `examples/06-warehouse-duckdb/`: loads `published/` into DuckDB, one file per audience; it refuses silver, `records/` and `delivery/`; `--check` checks each file holds its own schema only.
+- `examples/07-person-messages/`: writes one `.eml` file per person from `published/person/<key>/` and `builds/<latest>/delivery/directory.csv`, with no key in a message; sending through SES needs `--send` and `METERLINE_MAIL_CONFIRM=yes` and is refused when `CI` is set.
+- `examples/03-daily-job/`: every connector through its Python entry point, with a public fake in `<package>.testing`, then gold, as JSON status lines; `docs/how-to/operate-daily.md` covers running it for real.
 
-## The four goal paths
+## The five goal paths
+
+To run meterline on a platform, read [docs/integrate/README.md](docs/integrate/README.md); the same five scenarios, with the maturity of every step, are in [docs/integrate/scenarios.yaml](docs/integrate/scenarios.yaml). For a data lake and a warehouse, read [docs/integrate/c-lake-and-warehouse.md](docs/integrate/c-lake-and-warehouse.md).
 
 1. **Try it on simulated data:** README "Try it without a key", then `docs/tutorial.md`.
 2. **Run a connector on a real account:** README "Run a connector" and the connector's own README under `packages/`.
 3. **Build a dashboard from gold:** `packages/meterline-gold/README.md` for what a build writes; read the audience folder of the reader.
 4. **Add a provider:** `docs/how-to/add-a-provider.md`; the rules a connector keeps are in `docs/reference/connector-contract.md`, checked by `meterline.conformance`, and `.venv/bin/python tools/new_connector.py NAME` makes the skeleton.
+5. **Run the daily job and serve `published/` per reader:** `docs/how-to/operate-daily.md`, `packages/meterline-job/README.md`, `examples/03-daily-job/`. Each reader receives only their own sub-folder; `meterline_gold.servable(path, audience)` is the check.
 
 ## Where the contracts live
 
@@ -55,12 +64,13 @@ These call a provider and need that provider's key in the environment. The other
 - **Gold dataset schemas** (one row of every file a build writes, with types, units, descriptions, keys and joins): `docs/schemas/gold-dataset-<name>.schema.json`; the same as a page, with the rule for which cost column to sum: `docs/reference/gold-datasets.md`.
 - **Audience rules** (which file may be served to which reader): `docs/schemas/gold-audiences.json`; from Python, `meterline_gold.servable(path, audience)`.
 - **Connector contract** (layout, state, revision rule, exit codes, the fake API, the wiring checklist): `docs/reference/connector-contract.md`.
-- **Exit codes:** each connector README has an "Exit codes" table: `0` success, `1` transient (a 5xx, a 429 after retries, a timeout; run again later), `2` input or checks (bad arguments, a missing key, a damaged state file, a failed record check; fix the input), `3` permanent provider refusal (400, 401, 403, 404, 422; fix the key, scope or identifier, do not retry). `RunResult.failure_kind` names the same fact (`none`, `transient`, `input`, `permanent`) and `RunResult.http_status` the HTTP status; `meterline-gold` and `meterline-sim` document theirs in their READMEs.
+- **Exit codes:** each connector README has an "Exit codes" table: `0` success, `1` transient (a 5xx, a 429 after retries, a timeout; run again later), `2` input or checks (bad arguments, a missing key, a damaged state file, a failed record check; fix the input), `3` permanent provider refusal (400, 401, 403, 404, 422; fix the key, scope or identifier, do not retry). `RunResult.failure_kind` names the same fact (`none`, `transient`, `input`, `permanent`) and `RunResult.http_status` the HTTP status.
+- **The job:** it adds exit code `4` (gold or publish failed) to the connectors' 0 to 3. `central/published.json` and `freshness.json` have schemas in `docs/schemas/job/`.
 - **Record compatibility rules:** `docs/records.md`, section Compatibility.
 
 ## Privacy rules
 
-Follow these without exception. A dashboard or a script you write is bound by them too.
+Follow these without exception, in any dashboard or script you write.
 
 1. Never serve `delivery/` or `manifest.json` to anyone but the people who run the build: `delivery/directory.csv` holds names and emails, and the manifest lists every person and manager key.
 2. A dashboard reads the audience folder of its reader (`exec/`, `manager/<key>/` or `person/<key>/`), never a wider one.
@@ -83,8 +93,8 @@ Who gets which folder (rules 2 and 3 for each role; `meterline_gold.servable(pat
 - **Fast tier**, seconds to a minute, enough while you work: `.venv/bin/python -m pytest -q packages/meterline -p no:cacheprovider`, or one package folder at a time (`packages/meterline-gold`).
 - **Tools tier**, about 10 minutes: `.venv/bin/python -m pytest -q -n 4 tools -p no:cacheprovider`. It imports every package, so install every package first, as the Quick start in `README.md` shows.
 - **Full suite**, as CI runs it: `.venv/bin/python -m pytest -q -n 4 packages tools -p no:cacheprovider -rs`. It takes a long time (the simulator's property tests are most of it); a growing line of dots is healthy.
-- Acceptance tests are the ones named `test_done_check_*`; `-k done_check` selects them. Nothing in the suite touches the network or needs a key.
-- Lint: `ruff check packages/*/src` with the committed `ruff.toml`.
+- Acceptance tests are the ones named `test_done_check_*`; `-k done_check` selects them. Nothing in the suite needs the network or a key.
+- Lint: `ruff check packages/*/src`.
 
 ## What a change must keep
 

@@ -29,7 +29,7 @@ No output means the next run must be a backfill. A `daily` run with no `state.js
 
 ## One run at a time
 
-Two runs on the same data folder at once can write the same raw file or the same state file. Every connector therefore takes an exclusive lock on `<data folder>/runs/.lock` (a `flock`) before it does anything, and the job takes `<gold_root>/.lock` from the start of the gold step to the end of the publish step (one hold, so no other run's build lands in between). A run that finds a lock held stops at once with exit 1 and the message `data folder is in use by another run`, makes no request and writes nothing. The operating system releases the lock when the process ends, however it ends, so a crash leaves nothing to clean up. A second run that starts in the same UTC second as a finished one is still refused with exit 2.
+Two runs on the same data folder at once can write the same raw file or the same state file. Every connector therefore takes an exclusive lock on `<data folder>/runs/.lock` (a `flock`) before it does anything, and the job takes `<gold_root>/.lock` before it stages silver and holds it to the end of the publish step (one hold, so no other run's build lands in between). A run that finds a lock held stops at once with exit 1 and the message `data folder is in use by another run`, makes no request and writes nothing. The operating system releases the lock when the process ends, however it ends, so a crash leaves nothing to clean up. A second run that starts in the same UTC second as a finished one is still refused with exit 2.
 
 The lock replaces the `flock` line that this page used to ask for around the whole job: cron needs no wrapper now. The lock was tested on local disks only; on a network file system, `flock` depends on the file system, so keep the data root on a local disk.
 
@@ -71,24 +71,76 @@ Every connector exits with one of four codes, and the job adds a fifth for gold.
 | `1` | Transient: a 5xx, a 429 after retries, a timeout, or a folder locked by another run. | For a connector: waits `retry_wait_seconds` (300) and runs the same command once more; `retries` sets how many times. A skipped silver copy or a locked gold folder is not retried. |
 | `2` | Input: bad options, no key, a damaged state file, a failed check, a missing connector package, or gold's inputs. | Does not retry. The status line carries an `alert`. |
 | `3` | Permanent: the provider refused the request (400, 401, 403, 404, 422). | Does not retry. The status line carries an `alert`. |
-| `4` | Build: gold failed an assertion, or failed in any way that is not a wrong input, or the publish step failed (a changed frozen file, a failed check on the new folder). Only the job has this code. | Does not retry; gold is never run again by the job, and a failed publish leaves the previous `published` folder as it was. The status line has `failure_kind` `build` and an `alert`. |
+| `4` | Build: gold failed an assertion, or failed in any way that is not a wrong input, or the publish step failed (a changed frozen file, a failed check on the new folder). Only the job has this code. | Does not retry; gold is never run again by the job, and a failed publish leaves the previous `published` folder as it was. The status line has `failure_kind` `build` (gold) or `publish` (publish), and an `alert`. A publish skipped because gold failed in the same run has `failure_kind` `skipped` and gold's exit code. |
 
 The job prints one JSON line per step, with `command`, `ok`, `exit_code`, `failure_kind`, `http_status` and `attempts`, and exits with the worst code of its steps in the order 0, 1, 2, 3, 4. The gold line also holds `build` (the folder's name under `builds/`), `data_through` and `retry` (false). A scheduler that alerts on a non-zero exit therefore alerts on every failure, and a person acts on 2, 3 and 4: a retry cannot fix a wrong key or a failed check.
 
 ## The `published` folder
 
-The job's last step makes `<gold_root>/published`, a link to a folder named `published-<UTC time>` that holds what a reader may be served: `central/`, `exec/`, and a `manager/<key>/` or `person/<key>/` for each person and manager of the latest build, never `delivery/`. Serve this link, for example `published/exec` to the executives with the example dashboard, and nothing else under the gold root: `builds/`, `frozen/`, `frozen.json` and every `published-*` folder are central material.
+The job's last step makes `<gold_root>/published`, a link to a folder named `published-<UTC time>` that holds what the readers may be served between them: `central/` and `manifest.json`, `exec/`, and a `manager/<key>/` or `person/<key>/` for each person and manager of the latest build, never `delivery/`. It is not one thing to serve: each reader receives only their own sub-folder of it. `central/` and `manifest.json` go to central analysts, `exec/` to executives (for example `published/exec` with the example dashboard), and `manager/<key>/` and `person/<key>/` only to the person that key belongs to. `builds/`, `frozen/`, `frozen.json` and every `published-*` folder are central material and go to no reader. `meterline_gold.servable(path, audience)` is the check for one file, and [Who gets which folder](../../packages/meterline-gold/README.md#who-gets-which-folder) is the table it summarises.
 
 - **In progress and frozen.** The rows of a month in progress come from the latest build, so every run refreshes them. A month is frozen, by copying its rows into `frozen/<YYYY-MM>/` with a `SHA256SUMS` file and an entry in `frozen.json`, in the first run that ran every connector step successfully, when every connector's `complete_through` is on or after the month's last day, no row of the month can still change (`is_final` is true in `person_day`, `person_month`, `pools_month` and `groups_month`) and `freeze_after_days` (4) have passed. If it is still open `freeze_after_days + freeze_cap_extra_days` (4 + 10) days after its end, the next successful publish freezes it from the latest build anyway: `forced` in `frozen.json`, `forced_freeze YYYY-MM` in the status line's `warnings`, exit 0. Both numbers are in a `[publish]` table of the job file. From then on the month does not change.
 - **Swapped in at once.** The new folder is checked first (the checksums of every frozen month, gold's A09 check, file modes 0600 and folder modes 0700) and the link is replaced in one step, so a reader never sees half a folder. The previous folder is kept; older ones are removed. Any failure exits 4 and leaves the link where it was. Windows is not supported.
 - **After a key change.** Manager and person folders show only the months frozen under the current hashing key, so their history restarts at the rotation month; `exec/` keeps its frozen months and `central/` keeps all of them, so one person can appear there under two keys. `central/published.json` lists the months in `key_rotations`.
 - **People who left.** A person who is not in the latest build, and a manager who no longer manages, have no published folder. Their history stays in `central/` and `frozen/`.
-- **Freshness.** `central/published.json` says which build the folder comes from, how far the data is complete, when it was published, which months are frozen, in progress or forced, and the warnings; `freshness.json` in every other audience folder holds only `published_at` and `frozen_months`. Their schemas are `docs/schemas/job/published.schema.json` and `docs/schemas/job/freshness.schema.json`.
+- **Freshness.** `central/published.json` says which build the folder comes from, how far the data is complete, when it was published, which months are frozen, in progress or forced, one entry per source (`name`, `provider`, `step_ok`, `last_ok_run`, `complete_through`, `failure_kind`) and the warnings; `freshness.json` in every other audience folder holds `published_at`, `frozen_months`, `data_through` (the earliest `complete_through` of the sources, `null` when one is unknown) and `stale_sources` (names only). A source is stale when its step failed in this run, or when its `complete_through` is more than `stale_after_days` (3) before the run's day; each adds the warning `stale_source <name>`, and a `complete_through` that raises adds `complete_through_unavailable <name>`. The exit codes do not change. Their schemas are `docs/schemas/job/published.schema.json` and `docs/schemas/job/freshness.schema.json`.
+- **Old builds.** After a successful publish the job keeps the newest `keep_builds` builds under `builds/` (2 by default, at least 1) and deletes the others, except the build `published` was made from. From every kept build but the newest it deletes `delivery/` (the directory with names and addresses). Frozen months do not depend on a build folder and are never touched.
+- **A crashed freeze.** A month is frozen by writing its folder under `frozen/` and then its entry in `frozen.json`. If the process dies between the two, the next publish finds a folder without an entry; when its `SHA256SUMS` verify and its `FROZEN.json` names the month, the entry is rebuilt from that file and the warning `frozen_entry_recovered <month>` is added. A folder whose sums or marker fail still stops the publish with exit 4. A forced freeze also prints `warning: forced_freeze <month>` on stderr.
 - **A changed policy.** If `k` or the executive depth of the policy differ from those a frozen month was published under, the publish goes ahead and adds `policy_changed YYYY-MM` to the warnings.
 
-A month is refreshed on every published run until it is frozen, which happens once every source has final data for it and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at the next run; from then on it is delivered once and does not change, except that an erased person's rows are removed, and after a change of the hashing key manager and person folders show only months frozen under the new key. Serve only the `published` folder, never `builds/` or `frozen/`, and give managers and executives only its latest state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception that appears and then disappears. The adopter accepts this risk and has it validated by its data protection officer.
+A month is refreshed on every published run until it is frozen, which happens once every source has final data for it and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at the next run; from then on it is delivered once and does not change, except that the manual erasure procedure removes an erased person's rows (the tool has no erase command), and after a change of the hashing key manager and person folders show only months frozen under the new key. Each reader receives only their own sub-folder of `published/`, as `servable(path, audience)` says, never `builds/` or `frozen/`, and managers and executives are given only its latest state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception that appears and then disappears; and a recipient who kept an earlier version of a month can compare it with the version delivered again after a correction. The adopter decides before go-live whether to accept these risks, records the decision and has it validated by its data protection officer. The table of who receives which folder is [Who gets which folder](../../packages/meterline-gold/README.md#who-gets-which-folder).
 
-What this does not do: it deletes no build, migrates no frozen month to a new `schema_version` (a different version exits 4), and has no erase command (see Erasure in [PRIVACY.md](../PRIVACY.md)).
+What this does not do: it deletes no frozen month, migrates no frozen month to a new `schema_version` (a different version exits 4), and has no erase command (see Erasure in [PRIVACY.md](../PRIVACY.md)).
+
+## Watch it
+
+A job that nobody watches fails in two ways: it exits with an error and nobody reads it, or it never starts. Watch for both.
+
+**Alert on any exit other than 0.** The job's exit code is the worst of its steps, so a scheduler that alerts on a non-zero code alerts on every failure. With systemd, `OnFailure=` on the service starts another unit when the job exits other than 0 (`meterline-job.service` and `meterline-job-alert.service` in [example 03](../../examples/03-daily-job/README.md)):
+
+```
+[Unit]
+OnFailure=meterline-job-alert.service
+```
+
+With cron, wrap the command so that only a failure is mailed, and set `MAILTO`:
+
+```
+MAILTO=ops@example.com
+30 6 * * * cd /srv/meterline && .venv/bin/meterline-job run job.toml >> job.log 2>&1 || echo "meterline-job exited $? - see /srv/meterline/job.log"
+```
+
+**Check the result from outside.** An alert on the exit code says nothing when cron never fires, the machine is off or the unit is disabled. A second check, started by another scheduler and run by someone with access to `central/`, reads `central/published.json` and fails when `published_at` is more than 36 hours old or `stale_sources` is not empty (`stale_sources` is in every `freshness.json`; the names of the sources are in `sources` of `central/published.json`):
+
+```sh
+python3 - <<'PY'
+import json, sys
+from datetime import datetime, timedelta, timezone
+published = json.load(open("/srv/meterline/gold/published/central/published.json"))
+age = datetime.now(timezone.utc) - datetime.fromisoformat(published["published_at"])
+stale = [s["name"] for s in published["sources"] if "stale_source " + s["name"] in published["warnings"]]
+if age > timedelta(hours=36) or stale:
+    sys.exit("meterline: published %s ago, stale sources: %s" % (age, stale or "none"))
+PY
+```
+
+## When something goes wrong
+
+| If you see | Do |
+|---|---|
+| `stale_source <name>` in `central/published.json` `warnings`, or the name in `stale_sources` | Read that source's step line (`failure_kind`, `http_status`, `alert`) and fix what it says; the figures of that provider stop moving until it runs again. `complete_through_unavailable <name>` means its `state.json` could not be read: see exit `2`. |
+| Exit `1` two days running | A provider or the network is down for longer than a retry covers, or a lock is held by a run that never ends. Check the provider's status page, then `ps` for a stuck `meterline-job`; run the same command by hand once it is back. Nothing is lost: the next run resumes. |
+| Exit `2` | Input: a key, an option, a damaged `state.json` or gold's inputs. The line's `error` and `alert` name it. Fix the file or the variable and run again; it fails the same way until you do. |
+| Exit `3` | The provider refused the request (a key, its scope or an identifier). Replace the key or fix the scope; a retry cannot help. |
+| Exit `4` from gold (`failure_kind` `build`) | A gold assertion or an unexpected gold error; the `error` names the check. Do not delete a build to make it go away. Fix the cause (usually an organisation file) and run again; the previous `published` folder is still served. |
+| Exit `4` from publish (`failure_kind` `publish`), a checksum mismatch in `frozen/<month>` | A file of a delivered month changed or went missing. Restore `frozen/` and `frozen.json` from your backup, then run `meterline-job run job.toml --step publish`. Do not edit `SHA256SUMS` to make it pass. |
+| `frozen_entry_recovered <month>` in the warnings | A freeze was interrupted and the next publish finished it. Nothing to do; check that the month's rows are the ones you expected, and note the date. |
+| `forced_freeze <month>` in the warnings or on stderr | The month was frozen after `freeze_after_days + freeze_cap_extra_days` although a source had not final data. Someone should review it; to redo it, follow "Correcting a delivered month" in [PRIVACY.md](../PRIVACY.md#correcting-a-delivered-month-or-applying-a-stricter-policy). |
+| A second run exits `1` with "the gold folder is in use by another run", and nothing else is running | The lock is released when the process ends, so a lock that stays means a process that still runs. Find it (`ps`, `lsof <gold_root>/.lock`), stop it, and run again. Never delete `.lock`. |
+
+## Back up
+
+`<gold_root>/frozen/` and `<gold_root>/frozen.json` are the only copy of the months you delivered: a frozen month does not come back from the provider, and a build can no longer remake it once the job has pruned the build it came from. Back them up with the data root. To restore after a loss or a checksum mismatch, put `frozen/` and `frozen.json` back together (never one of them) and run `meterline-job run job.toml --step publish`. `builds/` and the `published-*` folders can be rebuilt; the connectors' folders under the data root hold the raw pages and records that make a build.
 
 ## How long a first backfill takes
 

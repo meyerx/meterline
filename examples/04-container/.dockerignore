@@ -1,0 +1,19 @@
+# Keep everything but the packages, this example and the scripts of examples 05, 06 and 07 out of the build context, and keep keys and local state out of it too.
+# BuildKit reads Dockerfile.dockerignore (the same list) when the Dockerfile is named with -f; the legacy builder reads the
+# .dockerignore of the context root. tools/test_example_04_container.py holds the two files equal.
+*
+!packages/
+!examples/04-container/
+!examples/05-dashboard/
+!examples/06-warehouse-duckdb/
+!examples/07-person-messages/
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/build
+**/dist
+**/.venv

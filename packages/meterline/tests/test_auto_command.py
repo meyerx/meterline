@@ -90,3 +90,50 @@ def test_requested_is_none_outside_the_block_and_restored_after_an_error():
     except RuntimeError:
         pass
     assert requested_command() is None
+
+
+# ---- v0.3 hardening A-8: an empty first backfill is not a backfill ----------------------------------------------------------
+
+
+def _counted(data, name, command, status, counts):
+    runs = data / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    (runs / (name + ".json")).write_text(json.dumps({"batch_id": name, "command": command, "status": status,
+                                                     "published_counts": counts, "pulled_at": "2026-09-15T06:00:00+00:00"}),
+                                         encoding="utf-8")
+
+
+def test_a_published_backfill_of_no_record_is_backfilled_again(tmp_path):
+    _counted(tmp_path, "20260915T060000Z", "backfill", "published", {"usage": 0, "activity": 0})
+    assert auto_command(tmp_path) == "backfill"
+    _counted(tmp_path, "20260916T060000Z", "backfill", "published", {})
+    assert auto_command(tmp_path) == "backfill"
+
+
+def test_a_published_backfill_with_a_record_of_any_kind_turns_auto_to_daily(tmp_path):
+    _counted(tmp_path, "20260915T060000Z", "backfill", "published", {"usage": 0, "activity": 3})
+    assert auto_command(tmp_path) == "daily"
+
+
+def test_the_first_empty_backfill_does_not_count_but_a_later_one_with_records_does(tmp_path):
+    _counted(tmp_path, "20260915T060000Z", "backfill", "published", {"usage": 0})
+    assert auto_command(tmp_path) == "backfill"
+    _counted(tmp_path, "20260916T060000Z", "backfill", "published", {"usage": 12})
+    assert auto_command(tmp_path) == "daily"
+
+
+def test_a_manifest_that_holds_no_counts_at_all_counts_as_before(tmp_path):
+    # no `published_counts` key: nothing says it was empty, so the rule of the 0.3.0 release (any published backfill) holds
+    _manifest(tmp_path, "20260915T060000Z", "backfill", "published")
+    assert auto_command(tmp_path) == "daily"
+
+
+def test_final_through_is_none_while_the_only_backfill_was_empty(tmp_path):
+    from datetime import date
+
+    from meterline.run import final_through
+
+    _counted(tmp_path, "20260915T060000Z", "backfill", "published", {"usage": 0})
+    assert final_through(tmp_path, [date(2026, 9, 1)], lambda day, pulled: True) is None
+    _counted(tmp_path, "20260916T060000Z", "backfill", "published", {"usage": 5})
+    assert final_through(tmp_path, [date(2026, 9, 1)], lambda day, pulled: True) == date(2026, 9, 1)

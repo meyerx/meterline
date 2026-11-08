@@ -26,6 +26,7 @@ _SEAT_COLS = [("month", T), ("provider", T), ("provider_account_id", T), ("seat_
               ("seats_billed", "count"), ("seats_on_eval_day", "count"), ("active_seats", "count"),
               ("idle_seats", "count"), ("seats_reported_max", "count"), ("seat_price", "money"),
               ("seat_cost", "money"), ("currency", T)]
+_STATUS_COLS = [("month_status", T), ("is_final", "bool")]  # appended to seats_month and costs_month (gold 2.1)
 _POOL_COLS = [("month", T), ("provider", T), ("provider_account_id", T), ("seats_billed", "count"),
               ("included_per_seat", "quantity"), ("pool_credits", "quantity"), ("gross_credits", "quantity"),
               ("pool_used_credits", "quantity"), ("overage_credits", "quantity"), ("overage_amount", "money"),
@@ -34,6 +35,7 @@ _POOL_COLS = [("month", T), ("provider", T), ("provider_account_id", T), ("seats
 _COST_COLS = [("month", T), ("provider", T), ("provider_account_id", T), ("currency", T), ("usage_cost_source", "money"),
               ("cost_source_basis", T), ("usage_cost_ref", "money"), ("seat_cost", "money"),
               ("total_cost_ref", "money"), ("cost_basis_label", T), ("invoice_usage", "money")]
+_OVERLAP_COLS = [("overlap_cost_ref", "money")]  # appended to costs_month (gold 2.1)
 
 # dataset -> ordered (column, type); the first column of a file, schema_version, is added by the writer
 SCHEMAS = {
@@ -49,7 +51,7 @@ SCHEMAS = {
                    ("product", T), ("model", T), ("model_tier", T), ("requests", "count")] + _TOKENS + [
                    ("credits", "quantity"), ("cost_source", "money"), ("cost_source_basis", T),
                    ("cost_source_currency", T), ("cost_ref", "money"), ("cost_ref_status", T),
-                   ("is_final", "bool"), ("source_records", "count")],
+                   ("is_final", "bool"), ("source_records", "count"), ("model_provider", T)],
     "person_day_activity": [("day", "date"), ("month", T), ("provider", T), ("provider_account_id", T), ("person_key", T),
                             ("actor_key", T), ("identity_status", T), ("product", T), ("sessions", "count"),
                             ("messages", "count"), ("requests", "count"), ("suggestions_shown", "count"),
@@ -65,13 +67,14 @@ SCHEMAS = {
                      ("rows_unpriced", "count"), ("rows_unknown_model", "count"), ("premium_share", "ratio"),
                      ("cache_rate", "ratio"), ("intensity_band", T), ("is_final", "bool"),
                      ("projected_cost_ref", "money")],
-    "seats_month": _SEAT_COLS,
-    "pools_month": _POOL_COLS,
-    "costs_month": _COST_COLS,
-    # the exec forms (7.6.1) carry the hidden marker (7.6.2, v1.2); written under the central file names
-    "exec_seats_month": _SEAT_COLS + [("hidden", "bool")],
-    "exec_pools_month": _POOL_COLS + [("hidden", "bool")],
-    "exec_costs_month": _COST_COLS + [("hidden", "bool")],
+    "seats_month": _SEAT_COLS + _STATUS_COLS,
+    "pools_month": _POOL_COLS + [("month_status", T)],  # is_final is there already: only the status is appended
+    "costs_month": _COST_COLS + _OVERLAP_COLS + _STATUS_COLS,
+    # the exec forms (7.6.1) are the central columns and then the hidden marker (7.6.2, v1.2), which stays the last column;
+    # written under the central file names. The columns added in gold 2.1 are appended to the dataset, before the marker
+    "exec_seats_month": _SEAT_COLS + _STATUS_COLS + [("hidden", "bool")],
+    "exec_pools_month": _POOL_COLS + [("month_status", T), ("hidden", "bool")],
+    "exec_costs_month": _COST_COLS + _OVERLAP_COLS + _STATUS_COLS + [("hidden", "bool")],
     "reconciliation_month": [("month", T), ("provider", T), ("provider_account_id", T), ("currency", T),
                              ("actor_cost_source", "money"), ("org_cost_source", "money"), ("org_cost_basis", T),
                              ("unallocated_cost_source", "money"), ("unreconciled_share", "ratio"),

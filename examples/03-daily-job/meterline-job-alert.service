@@ -1,0 +1,9 @@
+# /etc/systemd/system/meterline-job-alert.service
+# Started by OnFailure= of meterline-job.service when the job exits with anything other than 0. Replace the command with
+# the way you are told about a failure (a mail, a chat message, a pager).
+[Unit]
+Description=tell someone that the meterline daily job failed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p user.err "meterline-job failed: see journalctl -u meterline-job"

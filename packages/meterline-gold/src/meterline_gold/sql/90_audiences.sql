@@ -53,6 +53,8 @@ SELECT c.month, c.provider, c.provider_account_id, c.currency,
        CASE WHEN h.hidden THEN NULL ELSE c.total_cost_ref END AS total_cost_ref,
        CASE WHEN h.hidden THEN NULL ELSE c.cost_basis_label END AS cost_basis_label,
        CASE WHEN h.hidden THEN NULL ELSE c.invoice_usage END AS invoice_usage,
+       CASE WHEN h.hidden THEN NULL ELSE c.overlap_cost_ref END AS overlap_cost_ref,
+       c.month_status, c.is_final,
        coalesce(h.hidden, false) AS hidden
 FROM costs_month c
 LEFT JOIN exec_hidden h ON h.month = c.month AND h.provider = c.provider AND h.provider_account_id = c.provider_account_id;
@@ -67,7 +69,7 @@ SELECT p.month, p.provider, p.provider_account_id, p.seats_billed, p.included_pe
        p.budget_amount,
        CASE WHEN h.hidden THEN NULL ELSE p.budget_state END AS budget_state,
        CASE WHEN h.hidden THEN NULL ELSE p.budget_crossed_on END AS budget_crossed_on,
-       p.currency, p.is_final,
+       p.currency, p.is_final, p.month_status,
        coalesce(h.hidden, false) AS hidden
 FROM pools_month p
 LEFT JOIN exec_hidden h ON h.month = p.month AND h.provider = p.provider AND h.provider_account_id = p.provider_account_id;
@@ -80,7 +82,7 @@ SELECT s.month, s.provider, s.provider_account_id, s.seat_source, s.eval_day, s.
        CASE WHEN s.idle_seats >= (SELECT k FROM policy_t)
                  AND s.seats_on_eval_day - s.idle_seats >= (SELECT k FROM policy_t)
             THEN s.idle_seats END AS idle_seats,
-       s.seats_reported_max, s.seat_price, s.seat_cost, s.currency,
+       s.seats_reported_max, s.seat_price, s.seat_cost, s.currency, s.month_status, s.is_final,
        NOT (s.active_seats >= (SELECT k FROM policy_t)
             AND s.seats_billed - s.active_seats >= (SELECT k FROM policy_t)
             AND s.idle_seats >= (SELECT k FROM policy_t)
@@ -89,20 +91,20 @@ FROM seats_month s;
 
 -- dataset: exec/seats_month
 SELECT month, provider, provider_account_id, seat_source, eval_day, seats_billed, seats_on_eval_day, active_seats, idle_seats,
-       seats_reported_max, seat_price, seat_cost, currency, hidden
+       seats_reported_max, seat_price, seat_cost, currency, month_status, is_final, hidden
 FROM exec_seats_month
 ORDER BY month, provider, provider_account_id;
 
 -- dataset: exec/pools_month
 SELECT month, provider, provider_account_id, seats_billed, included_per_seat, pool_credits, gross_credits, pool_used_credits,
        overage_credits, overage_amount, pool_used_share, budget_amount, budget_state, budget_crossed_on, currency,
-       is_final, hidden
+       is_final, month_status, hidden
 FROM exec_pools_month
 ORDER BY month, provider, provider_account_id;
 
 -- dataset: exec/costs_month
 SELECT month, provider, provider_account_id, currency, usage_cost_source, cost_source_basis, usage_cost_ref, seat_cost,
-       total_cost_ref, cost_basis_label, invoice_usage, hidden
+       total_cost_ref, cost_basis_label, invoice_usage, overlap_cost_ref, month_status, is_final, hidden
 FROM exec_costs_month
 ORDER BY month, provider, provider_account_id;
 

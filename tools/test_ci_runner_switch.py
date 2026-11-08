@@ -29,9 +29,19 @@ def jobs(name):
         return yaml.safe_load(fh)["jobs"]
 
 
+# The one job that stays off the switch: it builds a Docker image, and the self-hosted runner may have no Docker.
+# tools/test_ci_container_job.py holds the job to GitHub's hosted runner and to its other rules.
+EXEMPT_FROM_THE_SWITCH = {"container": "ubuntu-latest"}
+
+
 def test_every_ci_job_runs_on_the_switchable_runner():
-    wrong = {job_id: job.get("runs-on") for job_id, job in jobs("ci.yml").items() if job.get("runs-on") != SWITCH}
+    wrong = {job_id: job.get("runs-on") for job_id, job in jobs("ci.yml").items()
+             if job.get("runs-on") != EXEMPT_FROM_THE_SWITCH.get(job_id, SWITCH)}
     assert jobs("ci.yml") and wrong == {}
+
+
+def test_only_the_container_job_is_exempt_and_it_is_in_the_workflow():
+    assert set(EXEMPT_FROM_THE_SWITCH) == {"container"} and set(EXEMPT_FROM_THE_SWITCH) <= set(jobs("ci.yml"))
 
 
 def test_every_release_job_stays_github_hosted():
