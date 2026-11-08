@@ -22,6 +22,11 @@ def _any_published_manifest(data_dir):
     return "daily" if any(True for _ in core._published_manifests(data_dir)) else "backfill"  # the defect: a daily counts
 
 
+def _counts_an_empty_backfill(data_dir):
+    # the defect (the rule of meterline 0.3.0): any published backfill counts, also one that published no record
+    return "daily" if any(m.get("command") == "backfill" for m in core._published_manifests(data_dir)) else "backfill"
+
+
 def _last_day_served(data_dir):
     state = Path(data_dir) / "state.json"
     if not state.is_file():
@@ -30,7 +35,8 @@ def _last_day_served(data_dir):
     return date.fromisoformat(max(days)) if days else None  # the defect: the last day loaded, final or not
 
 
-@pytest.mark.parametrize("defect", [_reads_state_json, _any_published_manifest], ids=lambda f: f.__name__.strip("_"))
+@pytest.mark.parametrize("defect", [_reads_state_json, _any_published_manifest, _counts_an_empty_backfill],
+                         ids=lambda f: f.__name__.strip("_"))
 def test_a_planted_auto_defect_fails_r18(defect, tmp_path, monkeypatch):
     monkeypatch.setattr(core, "auto_command", defect)
     with pytest.raises(ConformanceError, match=r"contract rule R18 .*not backfill") as caught:

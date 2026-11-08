@@ -32,13 +32,13 @@ PINNED_COLUMNS = {
     "gold-dataset-comparison_groups.schema.json": "schema_version month compare_cell persons p50_cost_ref p75_cost_ref p90_cost_ref",
     "gold-dataset-costs_month.schema.json": (
         "schema_version month provider provider_account_id currency usage_cost_source cost_source_basis usage_cost_ref "
-        "seat_cost total_cost_ref cost_basis_label invoice_usage"
+        "seat_cost total_cost_ref cost_basis_label invoice_usage overlap_cost_ref month_status is_final"
     ),
     "gold-dataset-data_quality.schema.json": "schema_version month provider provider_account_id metric value",
     "gold-dataset-directory.schema.json": "schema_version person_key given_name family_name email",
     "gold-dataset-exec-costs_month.schema.json": (
         "schema_version month provider provider_account_id currency usage_cost_source cost_source_basis usage_cost_ref "
-        "seat_cost total_cost_ref cost_basis_label invoice_usage hidden"
+        "seat_cost total_cost_ref cost_basis_label invoice_usage overlap_cost_ref month_status is_final hidden"
     ),
     "gold-dataset-exec-groups_month.schema.json": (
         "schema_version month cell_id cell_kind cell_key depth parent_cell_id persons active_persons active_days cost_ref "
@@ -47,12 +47,12 @@ PINNED_COLUMNS = {
     "gold-dataset-exec-pools_month.schema.json": (
         "schema_version month provider provider_account_id seats_billed included_per_seat pool_credits gross_credits "
         "pool_used_credits overage_credits overage_amount pool_used_share budget_amount budget_state budget_crossed_on "
-        "currency is_final hidden"
+        "currency is_final month_status hidden"
     ),
     "gold-dataset-exec-scenario_summary.schema.json": "schema_version scenario_id month persons persons_stopped units hidden",
     "gold-dataset-exec-seats_month.schema.json": (
         "schema_version month provider provider_account_id seat_source eval_day seats_billed seats_on_eval_day "
-        "active_seats idle_seats seats_reported_max seat_price seat_cost currency hidden"
+        "active_seats idle_seats seats_reported_max seat_price seat_cost currency month_status is_final hidden"
     ),
     "gold-dataset-groups_month.schema.json": (
         "schema_version month cell_id cell_kind cell_key depth parent_cell_id suppressed suppression_reason persons "
@@ -76,7 +76,7 @@ PINNED_COLUMNS = {
         "schema_version day month provider provider_account_id person_key actor_key identity_status identity_method "
         "actor_kind product model model_tier requests tokens_input_uncached tokens_cache_read tokens_cache_write "
         "tokens_cache_write_5m tokens_cache_write_1h tokens_input_total tokens_output credits cost_source "
-        "cost_source_basis cost_source_currency cost_ref cost_ref_status is_final source_records"
+        "cost_source_basis cost_source_currency cost_ref cost_ref_status is_final source_records model_provider"
     ),
     "gold-dataset-person_day_activity.schema.json": (
         "schema_version day month provider provider_account_id person_key actor_key identity_status product sessions "
@@ -92,7 +92,7 @@ PINNED_COLUMNS = {
     "gold-dataset-pools_month.schema.json": (
         "schema_version month provider provider_account_id seats_billed included_per_seat pool_credits gross_credits "
         "pool_used_credits overage_credits overage_amount pool_used_share budget_amount budget_state budget_crossed_on "
-        "currency is_final"
+        "currency is_final month_status"
     ),
     "gold-dataset-reconciliation_month.schema.json": (
         "schema_version month provider provider_account_id currency actor_cost_source org_cost_source org_cost_basis "
@@ -107,7 +107,7 @@ PINNED_COLUMNS = {
     "gold-dataset-scenario_units.schema.json": "schema_version scenario_id month unit_id envelope position stopped_on excess top_ups top_up_total",
     "gold-dataset-seats_month.schema.json": (
         "schema_version month provider provider_account_id seat_source eval_day seats_billed seats_on_eval_day "
-        "active_seats idle_seats seats_reported_max seat_price seat_cost currency"
+        "active_seats idle_seats seats_reported_max seat_price seat_cost currency month_status is_final"
     ),
     "gold-dataset-units.schema.json": "schema_version unit_id valid_from valid_to dimension key name kind parent_id function cost_center head_key",
     "gold-manifest.schema.json": (

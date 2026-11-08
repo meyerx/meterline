@@ -56,6 +56,19 @@
       "x-hidden-covered": false,
       "x-unit": "currency"
     },
+    "is_final": {
+      "description": "True when the month is complete and every usage row of it is final.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
     "month": {
       "description": "Calendar month, YYYY-MM.",
       "pattern": "^[0-9]{4}-[0-9]{2}$",
@@ -65,6 +78,26 @@
       "x-gold-type": "text",
       "x-hidden-covered": false,
       "x-unit": "month"
+    },
+    "month_status": {
+      "description": "complete for a finished month, running for the month in progress.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
+    },
+    "overlap_cost_ref": {
+      "description": "Part of usage_cost_ref that a proxy routed to a provider whose own connector is also in this build: those calls are in both providers' rows. 0 for every other row; empty where the row is hidden.",
+      "pattern": "^-?[0-9]+\\.[0-9]{2,}$",
+      "type": [
+        "string",
+        "null"
+      ],
+      "x-gold-type": "money",
+      "x-hidden-covered": true,
+      "x-unit": "currency"
     },
     "provider": {
       "description": "Provider the usage or seats came from, as the silver records name it.",
@@ -88,7 +121,7 @@
     "schema_version": {
       "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
       "enum": [
-        "2.0"
+        "2.1"
       ],
       "type": [
         "string"
@@ -155,6 +188,9 @@
     "total_cost_ref",
     "cost_basis_label",
     "invoice_usage",
+    "overlap_cost_ref",
+    "month_status",
+    "is_final",
     "hidden"
   ],
   "title": "gold-dataset-exec-costs_month",
@@ -175,9 +211,12 @@
     "total_cost_ref",
     "cost_basis_label",
     "invoice_usage",
+    "overlap_cost_ref",
+    "month_status",
+    "is_final",
     "hidden"
   ],
-  "x-cost-column-rule": "For spend by provider and month sum `usage_cost_ref` (reference cost) or `total_cost_ref` (usage plus seats). Never add `seat_cost` to `total_cost_ref`: it is already inside. Sum `usage_cost_source` only within one `cost_source_basis`.",
+  "x-cost-column-rule": "For spend by provider and month sum `usage_cost_ref` (reference cost) or `total_cost_ref` (usage plus seats). Never add `seat_cost` to `total_cost_ref`: it is already inside. Sum `usage_cost_source` only within one `cost_source_basis`. A proxy row's `overlap_cost_ref` is the part of its cost that another provider's row also holds: subtract it before adding the two. A row with `is_final` false belongs to a running month, whose `seat_cost` is the full month's fee.",
   "x-dataset": "costs_month",
   "x-files": [
     "exec/costs_month.csv"

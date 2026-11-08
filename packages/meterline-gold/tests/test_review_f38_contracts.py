@@ -32,7 +32,7 @@ GOLD_READS = {
     "usage": ["provider", "provider_account_id", "scope", "grain", "period_start", "actor_kind", "actor_id", "product", "model",
               "tokens_input_uncached", "tokens_cache_read", "tokens_cache_write", "tokens_cache_write_5m",
               "tokens_cache_write_1h", "tokens_input_total", "tokens_output", "requests", "quantities", "cost",
-              "currency", "cost_basis", "is_final", "batch_id", "pulled_at"],
+              "currency", "cost_basis", "is_final", "batch_id", "pulled_at", "model_provider"],
     "activity": ["provider", "provider_account_id", "scope", "grain", "period_start", "actor_kind", "actor_id", "product",
                  "sessions", "messages", "requests", "suggestions_shown", "suggestions_accepted", "lines_added",
                  "lines_removed", "edits_accepted", "edits_rejected", "commits", "pull_requests", "pulled_at"],

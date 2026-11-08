@@ -73,16 +73,17 @@ def test_release_permissions_are_least_privilege_and_use_no_stored_token():
 
 
 def test_release_builds_checks_attests_and_records_an_sbom():
-    data = workflow("release.yml")
-    build = "\n".join(s.get("run", "") + str(s.get("uses", "")) for s in data["jobs"]["build"]["steps"])
-    assert "python -m build" in build
-    assert "twine check --strict" in build
-    assert "actions/attest-build-provenance@" in build
-    assert "cyclonedx-py environment" in build
-    release = "\n".join(s.get("run", "") for s in data["jobs"]["github-release"]["steps"])
+    jobs = workflow("release.yml")["jobs"]
+
+    def text(job):
+        return "\n".join(s.get("run", "") + str(s.get("uses", "")) for s in jobs[job]["steps"])
+
+    assert "-m build" in text("build") and "actions/attest-build-provenance@" in text("build")
+    assert "twine\" check --strict" in text("check") and "cyclonedx-py\" environment" in text("check")
+    release = "\n".join(s.get("run", "") for s in jobs["github-release"]["steps"])
     assert "gh release create" in release and "sbom/" in release
-    assert data["jobs"]["publish"]["needs"] == "build"
-    assert data["jobs"]["github-release"]["needs"] == ["build", "publish"]
+    assert jobs["publish"]["needs"] == ["verify", "build", "check"]
+    assert jobs["github-release"]["needs"] == ["build", "check", "publish"]
 
 
 def test_dependabot_watches_the_actions_and_every_package():
@@ -155,14 +156,17 @@ def test_the_changelog_has_a_version_entry_template():
         assert part in template, part
 
 
-def test_the_release_build_refuses_a_tag_whose_commit_is_not_on_main():
-    # M-22: versions and the changelog change only through a pull request merged into main
-    build = workflow("release.yml")["jobs"]["build"]["steps"]
-    checkout = build[0]
+def test_the_release_refuses_a_tag_whose_commit_is_not_on_main():
+    # M-22: versions and the changelog change only through a pull request merged into main. The check is the verify job's;
+    # the job that attests needs it, so it never runs for such a tag
+    data = workflow("release.yml")
+    verify = data["jobs"]["verify"]["steps"]
+    checkout = verify[0]
     assert checkout["uses"].startswith("actions/checkout@") and checkout["with"]["fetch-depth"] == 0
-    check = [s for s in build if 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in s.get("run", "")]
-    assert len(check) == 1 and build.index(check[0]) < build.index([s for s in build if s.get("id") == "tag"][0])
+    check = [s for s in verify if 'git merge-base --is-ancestor "$GITHUB_SHA" origin/main' in s.get("run", "")]
+    assert len(check) == 1 and verify.index(check[0]) < verify.index([s for s in verify if s.get("id") == "tag"][0])
     assert "set -euo pipefail" in check[0]["run"] and "exit 1" in check[0]["run"]
+    assert data["jobs"]["build"]["needs"] == "verify"
 
 
 def test_release_yml_accepts_the_job_package():

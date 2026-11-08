@@ -178,13 +178,13 @@ def test_a_policy_change_adds_a_warning_and_publishing_goes_ahead(tmp_path):
     cfg["gold"]["policy"] = str(five)
     make_build(tmp_path / "gold", "2026-05-04", policy_sha=policy_privacy(five)[0])
     first = run(tmp_path, cfg=cfg)
-    assert first.extra["frozen"] == ["2026-04"] and first.extra["warnings"] == []
+    assert first.extra["frozen"] == ["2026-04"] and first.extra["warnings"] == ["stale_source claude", "stale_source proxy"]
     cfg["gold"]["policy"] = str(six)
     make_build(tmp_path / "gold", "2026-05-05", policy_sha=policy_privacy(six)[0])
     second = run(tmp_path, today=date(2026, 5, 5), minutes=60, cfg=cfg)
-    assert second.exit_code == 0 and second.extra["warnings"] == ["policy_changed 2026-04"]
+    assert second.exit_code == 0 and second.extra["warnings"] == ["policy_changed 2026-04", "stale_source claude", "stale_source proxy"]
     published = json.loads((served(tmp_path) / "central" / "published.json").read_text(encoding="utf-8"))
-    assert published["warnings"] == ["policy_changed 2026-04"]
+    assert published["warnings"] == ["policy_changed 2026-04", "stale_source claude", "stale_source proxy"]
     assert set(published["policy_sha256"]) == {"2026-05-04", "2026-05-05"} and len(set(published["policy_sha256"].values())) == 2
 
 
@@ -199,7 +199,7 @@ def test_a_policy_change_that_leaves_the_privacy_parameters_alone_is_no_warning(
     run(tmp_path, cfg=cfg)
     cfg["gold"]["policy"] = str(other)
     make_build(tmp_path / "gold", "2026-05-05", policy_sha=policy_privacy(other)[0])
-    assert run(tmp_path, today=date(2026, 5, 5), minutes=60, cfg=cfg).extra["warnings"] == []
+    assert run(tmp_path, today=date(2026, 5, 5), minutes=60, cfg=cfg).extra["warnings"] == ["stale_source claude", "stale_source proxy"]
 
 
 # ---- P5: the freshness files ---------------------------------------------------------------------------------------------
@@ -215,10 +215,10 @@ def test_published_json_says_what_the_folder_holds(tmp_path):
     assert data["latest_build"] == "2026-05-05" and data["data_complete_through"] == "2026-04-30"
     assert data["published_at"] == "2026-05-04T07:00:00+00:00"
     assert data["frozen_months"] == ["2026-04"] and data["in_progress_months"] == ["2026-05"]
-    assert data["forced_freezes"] == [] and data["key_rotations"] == [] and data["warnings"] == []
+    assert data["forced_freezes"] == [] and data["key_rotations"] == [] and data["warnings"] == ["stale_source claude", "stale_source proxy"]
     assert list(data["policy_sha256"]) == ["2026-05-04", "2026-05-05"] and all(len(v) == 64 for v in data["policy_sha256"].values())
     assert sorted(data) == ["data_complete_through", "forced_freezes", "frozen_months", "in_progress_months", "key_rotations",
-                            "latest_build", "policy_sha256", "published_at", "warnings"]
+                            "latest_build", "policy_sha256", "published_at", "sources", "warnings"]
 
 
 def test_published_json_lists_a_forced_freeze_and_a_missing_completeness(tmp_path):
@@ -226,7 +226,7 @@ def test_published_json_lists_a_forced_freeze_and_a_missing_completeness(tmp_pat
     DONE["proxy"] = None
     run(tmp_path, today=date(2026, 5, 14), complete=False)
     data = json.loads((served(tmp_path) / "central" / "published.json").read_text(encoding="utf-8"))
-    assert data["forced_freezes"] == ["2026-04"] and data["warnings"] == ["forced_freeze 2026-04"]
+    assert data["forced_freezes"] == ["2026-04"] and data["warnings"] == ["forced_freeze 2026-04", "stale_source claude"]
     assert data["data_complete_through"] is None
 
 
@@ -237,7 +237,7 @@ def test_every_other_audience_folder_holds_a_freshness_file_with_two_keys(tmp_pa
                served(tmp_path) / "person" / "pk_b"]
     for folder in folders:
         data = json.loads((folder / "freshness.json").read_text(encoding="utf-8"))
-        assert sorted(data) == ["frozen_months", "published_at"], folder
+        assert sorted(data) == ["data_through", "frozen_months", "published_at", "stale_sources"], folder
         assert data["published_at"] == "2026-05-04T06:00:00+00:00" and data["frozen_months"] == ["2026-04"]
     assert not (served(tmp_path) / "central" / "freshness.json").exists()
 
@@ -294,5 +294,5 @@ def test_the_names_of_the_two_files_are_pinned():
     """Typed here, never read from the schema: a key added, removed or renamed fails until this list is changed on purpose."""
     assert sorted(schemas.published_schema()["properties"]) == [
         "data_complete_through", "forced_freezes", "frozen_months", "in_progress_months", "key_rotations", "latest_build",
-        "policy_sha256", "published_at", "warnings"]
-    assert sorted(schemas.freshness_schema()["properties"]) == ["frozen_months", "published_at"]
+        "policy_sha256", "published_at", "sources", "warnings"]
+    assert sorted(schemas.freshness_schema()["properties"]) == ["data_through", "frozen_months", "published_at", "stale_sources"]

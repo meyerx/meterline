@@ -107,7 +107,9 @@ SELECT m.month, o.provider, o.provider_account_id, o.seat_source, m.eval_day,
        e.per_month AS seat_price,
        coalesce(c.seats_billed, 0) * e.per_month AS seat_cost,
        (SELECT currency FROM policy_t) AS currency,
-       e.included_credits AS included_credits
+       e.included_credits AS included_credits,
+       m.month_status,
+       (m.month_status = 'complete') AS is_final
 FROM months m
 CROSS JOIN seat_orgs o
 LEFT JOIN seat_counts c ON c.month = m.month AND c.provider = o.provider AND c.provider_account_id = o.provider_account_id
@@ -163,7 +165,8 @@ SELECT s.month, s.provider, s.provider_account_id,
         WHERE d.month = s.month AND d.provider = s.provider AND d.provider_account_id = s.provider_account_id
           AND b.monthly_amount IS NOT NULL AND d.cumulative_cost > b.monthly_amount) AS budget_crossed_on,
        s.currency,
-       coalesce(a.is_final, FALSE) AS is_final
+       (s.month_status = 'complete' AND coalesce(a.is_final, FALSE)) AS is_final,
+       s.month_status
 FROM seats_month s
 LEFT JOIN pool_agg a ON a.month = s.month AND a.provider = s.provider AND a.provider_account_id = s.provider_account_id
 LEFT JOIN policy_budgets b ON b.provider = s.provider AND b.provider_account_id = s.provider_account_id
@@ -175,6 +178,32 @@ SET pool_used_share = ratio4(pool_used_credits, pool_credits),
                         WHEN budget_crossed_on IS NOT NULL THEN 'crossed'
                         ELSE 'within' END;
 
+-- Proxy overlap (v0.3 hardening A-2). A proxy source is one whose records carry a model_provider other than its own
+-- provider. The part of its reference cost that is routed to a provider that another source of this build reports
+-- (a provider with any record in the build) is counted by both: it is the overlap. A person_day row with a record that
+-- could not be priced has no cost_ref, so its records count for nothing here either.
+CREATE OR REPLACE TABLE build_providers AS
+SELECT DISTINCT provider FROM (
+  SELECT provider FROM silver_usage
+  UNION ALL SELECT provider FROM silver_activity
+  UNION ALL SELECT provider FROM silver_seats
+  UNION ALL SELECT provider FROM silver_assignments
+  UNION ALL SELECT provider FROM silver_org_totals
+) t;
+
+CREATE OR REPLACE TABLE usage_overlap AS
+SELECT month_label(g.period_start) AS month, g.provider, g.provider_account_id, g.model_provider,
+       sum(g.cost_ref) AS overlap
+FROM (
+  SELECT r.*, bool_or(r.cost_ref IS NULL) OVER (PARTITION BY r.period_start, r.provider, r.provider_account_id,
+                                                  r.person_key, r.actor_key, r.product, r.model) AS group_unpriced
+  FROM usage_priced r
+) g
+WHERE g.model_provider IS NOT NULL AND g.model_provider <> g.provider
+  AND g.model_provider IN (SELECT provider FROM build_providers)
+  AND NOT g.group_unpriced
+GROUP BY month_label(g.period_start), g.provider, g.provider_account_id, g.model_provider;
+
 -- costs_month (spec 6.7): every (provider, org) with person_day rows or a seats_month row.
 CREATE OR REPLACE TABLE costs_month AS
 WITH usage AS (
@@ -182,7 +211,8 @@ WITH usage AS (
          sum(cost_source) AS usage_cost_source,
          CASE WHEN count(DISTINCT cost_source_basis) > 1 THEN 'mixed' ELSE min(cost_source_basis) END
            AS cost_source_basis,
-         coalesce(sum(cost_ref), CAST(0 AS DECIMAL(38,12))) AS usage_cost_ref
+         coalesce(sum(cost_ref), CAST(0 AS DECIMAL(38,12))) AS usage_cost_ref,
+         bool_and(is_final) AS rows_final
   FROM person_day
   GROUP BY month, provider, provider_account_id
 ), keys AS (
@@ -203,27 +233,34 @@ SELECT k.month, k.provider, k.provider_account_id,
          WHEN 'consumption' THEN 'usage value, not the invoice'
          WHEN 'estimate' THEN 'estimate, not the invoice'
          WHEN 'mixed' THEN 'mix of billed, usage-value and estimated amounts' END AS cost_basis_label,
-       iu.amount AS invoice_usage
+       iu.amount AS invoice_usage,
+       coalesce(o.overlap, CAST(0 AS DECIMAL(38,12))) AS overlap_cost_ref,
+       mo.month_status,
+       (mo.month_status = 'complete' AND coalesce(u.rows_final, TRUE)) AS is_final
 FROM keys k
+JOIN months mo ON mo.month = k.month
 LEFT JOIN usage u ON u.month = k.month AND u.provider = k.provider AND u.provider_account_id = k.provider_account_id
+LEFT JOIN (SELECT month, provider, provider_account_id, sum(overlap) AS overlap
+           FROM usage_overlap GROUP BY month, provider, provider_account_id) o
+  ON o.month = k.month AND o.provider = k.provider AND o.provider_account_id = k.provider_account_id
 LEFT JOIN seats_month s ON s.month = k.month AND s.provider = k.provider AND s.provider_account_id = k.provider_account_id
 LEFT JOIN invoice iu ON iu.month = k.month AND iu.provider = k.provider AND iu.provider_account_id = k.provider_account_id AND iu.kind = 'usage';
 
 -- dataset: seats_month
 SELECT month, provider, provider_account_id, seat_source, eval_day, seats_billed, seats_on_eval_day, active_seats, idle_seats,
-       seats_reported_max, seat_price, seat_cost, currency
+       seats_reported_max, seat_price, seat_cost, currency, month_status, is_final
 FROM seats_month
 ORDER BY month, provider, provider_account_id;
 
 -- dataset: pools_month
 SELECT month, provider, provider_account_id, seats_billed, included_per_seat, pool_credits, gross_credits, pool_used_credits,
        overage_credits, overage_amount, pool_used_share, budget_amount, budget_state, budget_crossed_on, currency,
-       is_final
+       is_final, month_status
 FROM pools_month
 ORDER BY month, provider, provider_account_id;
 
 -- dataset: costs_month
 SELECT month, provider, provider_account_id, currency, usage_cost_source, cost_source_basis, usage_cost_ref, seat_cost,
-       total_cost_ref, cost_basis_label, invoice_usage
+       total_cost_ref, cost_basis_label, invoice_usage, overlap_cost_ref, month_status, is_final
 FROM costs_month
 ORDER BY month, provider, provider_account_id;

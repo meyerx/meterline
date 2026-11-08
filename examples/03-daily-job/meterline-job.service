@@ -1,0 +1,18 @@
+# /etc/systemd/system/meterline-job.service
+# Runs the daily job once. Keys are not in this file: they are in the environment file below, which only the service's
+# user may read (mode 0600, owned by that user): chmod 0600 /etc/meterline/job.env. Start from job.env.example.
+# Change User, WorkingDirectory and the two paths to your own.
+[Unit]
+Description=meterline daily job (connectors, silver, gold, publish)
+Wants=network-online.target
+After=network-online.target
+OnFailure=meterline-job-alert.service
+
+[Service]
+Type=oneshot
+User=meterline
+WorkingDirectory=/srv/meterline
+EnvironmentFile=/etc/meterline/job.env
+ExecStart=/srv/meterline/.venv/bin/meterline-job run job.toml
+# a run that is still going when the next one is due is not started twice: the timer does not start a running service
+TimeoutStartSec=6h

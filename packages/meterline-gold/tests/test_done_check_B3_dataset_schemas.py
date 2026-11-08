@@ -199,7 +199,7 @@ def test_the_hidden_marker_covers_the_columns_of_the_spec():
     covered = {name: sorted(c for c, s in sch["properties"].items() if s["x-hidden-covered"])
                for name, sch in generated.items()}
     assert covered["gold-dataset-exec-costs_month.schema.json"] == sorted(
-        ["usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref"])
+        ["usage_cost_source", "cost_source_basis", "usage_cost_ref", "total_cost_ref", "overlap_cost_ref"])
     assert covered["gold-dataset-exec-seats_month.schema.json"] == ["active_seats", "idle_seats"]
     assert covered["gold-dataset-exec-scenario_summary.schema.json"] == ["persons_stopped"]
     assert covered["gold-dataset-comparison.schema.json"] == ["comparison_band"]

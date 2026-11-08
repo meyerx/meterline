@@ -80,7 +80,7 @@
       "x-unit": "count"
     },
     "is_final": {
-      "description": "True when the provider will no longer revise the figure.",
+      "description": "True when the month is complete and the provider will no longer revise the billing rows.",
       "enum": [
         "true",
         "false"
@@ -101,6 +101,15 @@
       "x-gold-type": "text",
       "x-hidden-covered": false,
       "x-unit": "month"
+    },
+    "month_status": {
+      "description": "complete for a finished month, running for the month in progress.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
     },
     "overage_amount": {
       "description": "Billed amount for the credits beyond the pool.",
@@ -178,7 +187,7 @@
     "schema_version": {
       "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
       "enum": [
-        "2.0"
+        "2.1"
       ],
       "type": [
         "string"
@@ -216,6 +225,7 @@
     "budget_crossed_on",
     "currency",
     "is_final",
+    "month_status",
     "hidden"
   ],
   "title": "gold-dataset-exec-pools_month",
@@ -241,6 +251,7 @@
     "budget_crossed_on",
     "currency",
     "is_final",
+    "month_status",
     "hidden"
   ],
   "x-cost-column-rule": "`overage_amount` is billed money for credits beyond the pool and is part of no `cost_ref`. The credit columns are quantities, not currency.",

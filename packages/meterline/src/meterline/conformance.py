@@ -627,6 +627,16 @@ def _r18_auto(c: Connector, tmp: Path) -> None:
             "state file" % (broken.exit_code, "a" if (half / "state.json").is_file() else "no"))
     auto(half, "after a backfill that failed half way", now=later, want="backfill")
 
+    empty = tmp / "empty-backfill"
+    published = _go(c, empty, "backfill", fake=c.make_fake())
+    manifest_path = Path(published.manifest_path) if published.manifest_path is not None else None
+    _expect(published.exit_code == 0 and manifest_path is not None, "R18",
+            "backfill exited %d and wrote no manifest; the kit needs a published backfill to turn into an empty one" % published.exit_code)
+    manifest = _manifest(manifest_path)
+    manifest["published_counts"] = {kind: 0 for kind in (manifest.get("published_counts") or {"usage": 0})}  # what a backfill of no record wrote
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    auto(empty, "after a published backfill of no record", now=later, want="backfill")
+
     first = tmp / "daily-first"
     daily = _go(c, first, "daily", options={"since": c.backfill_options["since"]})
     _expect(daily.exit_code == 0 and _ran(daily).get("status") == "published", "R18",

@@ -78,7 +78,8 @@ def test_a_complete_month_is_frozen_by_copy_on_the_fourth_day(tmp_path):
     build = make_build(tmp_path / "gold", "2026-05-04")
     result = run(tmp_path)
     assert result.exit_code == 0, result
-    assert result.extra["frozen"] == ["2026-04"] and result.extra["warnings"] == []
+    # both sources end on 30 April and the run is on 4 May: four days, one more than stale_after_days allows
+    assert result.extra["frozen"] == ["2026-04"] and result.extra["warnings"] == ["stale_source claude", "stale_source proxy"]
     frozen = tmp_path / "gold" / "frozen" / "2026-04"
     assert sorted(p.name for p in (tmp_path / "gold" / "frozen").iterdir()) == ["2026-04"]
     # the frozen rows are the rows of the source build, compared as text, file by file
@@ -111,7 +112,7 @@ def test_frozen_json_records_where_the_month_came_from(tmp_path):
     run(tmp_path)
     entry = frozen_json(tmp_path)["2026-04"]
     assert entry["source_build"] == "2026-05-04" and entry["key_check"] == "kc_x" and entry["forced"] is False
-    assert entry["schema_version"] == "2.0" and entry["frozen_at"].startswith("2026-05-04T06:00:00")
+    assert entry["schema_version"] == "2.1" and entry["frozen_at"].startswith("2026-05-04T06:00:00")
     assert len(entry["policy_sha256"]) == 64 and entry["privacy"] == {"k": 5, "exec_max_depth": 2}
     assert "partial_start" not in entry or entry["partial_start"] is False
 
@@ -154,7 +155,7 @@ def test_a_failing_complete_through_blocks_the_freeze_without_stopping_the_publi
 def test_a_run_that_did_not_run_every_connector_does_not_freeze(tmp_path):
     make_build(tmp_path / "gold", "2026-05-04")
     result = run(tmp_path, complete=False)  # --step gold, --step publish, or a connector that failed
-    assert result.exit_code == 0 and result.extra["frozen"] == [] and result.extra["warnings"] == []
+    assert result.exit_code == 0 and result.extra["frozen"] == [] and result.extra["warnings"] == ["stale_source claude", "stale_source proxy"]
     assert not (tmp_path / "gold" / "frozen").exists() or not list((tmp_path / "gold" / "frozen").iterdir())
 
 
@@ -181,14 +182,14 @@ def test_the_cap_forces_the_freeze_with_a_warning_and_exit_0(tmp_path):
     assert run(tmp_path, today=date(2026, 5, 13)).extra["frozen"] == []  # 13 days after the end: one more day to wait
     result = run(tmp_path, today=date(2026, 5, 14))  # 4 + 10 = 14 days after the end of April
     assert result.exit_code == 0 and result.extra["frozen"] == ["2026-04"]
-    assert result.extra["warnings"] == ["forced_freeze 2026-04"]
+    assert result.extra["warnings"] == ["forced_freeze 2026-04", "stale_source claude"]  # the proxy has no answer: not stale by date
     assert frozen_json(tmp_path)["2026-04"]["forced"] is True
 
 
 def test_the_cap_also_applies_to_a_run_of_one_step(tmp_path):
     make_build(tmp_path / "gold", "2026-05-14")
     result = run(tmp_path, today=date(2026, 5, 14), complete=False)
-    assert result.extra["frozen"] == ["2026-04"] and result.extra["warnings"] == ["forced_freeze 2026-04"]
+    assert result.extra["frozen"] == ["2026-04"] and result.extra["warnings"] == ["forced_freeze 2026-04"] + ["stale_source claude", "stale_source proxy"]
 
 
 def test_the_cap_follows_the_settings(tmp_path):
@@ -222,8 +223,8 @@ def test_a_month_folder_that_exists_without_an_entry_is_refused(tmp_path):
     make_build(tmp_path / "gold", "2026-05-04")
     (tmp_path / "gold" / "frozen" / "2026-04").mkdir(parents=True)
     result = run(tmp_path)
-    assert result.exit_code == 4 and result.failure_kind == "build"
-    assert "frozen/2026-04" in result.error and "already exists" in result.error
+    assert result.exit_code == 4 and result.failure_kind == "publish"
+    assert "frozen/2026-04" in result.error and "has no entry" in result.error and "cannot be recovered" in result.error
     assert not (tmp_path / "gold" / "frozen.json").exists()
 
 
@@ -282,9 +283,9 @@ since = "2026-09-01"
 
 
 def test_the_settings_default_to_4_and_10():
-    assert parse_config(BASE)["publish"] == {"freeze_after_days": 4, "freeze_cap_extra_days": 10}
+    assert parse_config(BASE)["publish"] == {"freeze_after_days": 4, "freeze_cap_extra_days": 10, "stale_after_days": 3, "keep_builds": 2}
     cfg = parse_config(BASE + b"[publish]\nfreeze_after_days = 0\n")
-    assert cfg["publish"] == {"freeze_after_days": 0, "freeze_cap_extra_days": 10}
+    assert cfg["publish"] == {"freeze_after_days": 0, "freeze_cap_extra_days": 10, "stale_after_days": 3, "keep_builds": 2}
 
 
 @pytest.mark.parametrize("table", [b"freeze_after_days = '4'", b"freeze_after_days = -1", b"freeze_cap_extra_days = 2.5",
@@ -299,3 +300,16 @@ def test_publish_is_a_reserved_step_name():
     with pytest.raises(ConfigError) as err:
         parse_config(BASE.replace(b'name = "claude"', b'name = "publish"'))
     assert "reserved" in str(err.value)
+
+
+# ---- v0.3 hardening A-7: a forced freeze says so on stderr ---------------------------------------------------------------
+
+
+def test_a_forced_freeze_prints_a_warning_line_on_stderr_and_still_exits_0(tmp_path, capsys):
+    make_build(tmp_path / "gold", "2026-05-14")
+    DONE["proxy"] = None
+    result = run(tmp_path, today=date(2026, 5, 14))
+    err = capsys.readouterr().err
+    assert result.exit_code == 0 and "forced_freeze 2026-04" in result.extra["warnings"]
+    assert "warning: forced_freeze 2026-04" in err.splitlines()
+    assert "forced_freeze" not in capsys.readouterr().out

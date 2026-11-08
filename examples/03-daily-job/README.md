@@ -12,9 +12,11 @@ The tests of the `meterline-job` package run the job end to end against the conn
 .venv/bin/python -m pytest -q packages/meterline-job/tests -p no:cacheprovider
 ```
 
-**Expected output.** `47 passed`. The tests check that each connector the job runs writes silver and gold is built, that a provider answering HTTP 500 gives a non-zero exit while the other connectors still write silver, that a run after a published backfill is a `daily`, that a failed first backfill is followed by a backfill and not a `daily`, that a 401 is not retried and raises an alert, that a 503 is retried once, that an input error is not retried, that a gold failure exits 4 and is not retried, that `parquet` and `invoice` reach gold, that a leftover `.tmp` folder is cleared, that a locked folder is skipped, and that no status line holds a key. Two more check, under umask 022 and 000, that the silver copy the job stages is readable by its owner only.
+**Expected output.** All of them pass. The tests check that each connector the job runs writes silver and gold is built, that a provider answering HTTP 500 gives a non-zero exit while the other connectors still write silver, that a run after a published backfill is a `daily`, that a failed first backfill is followed by a backfill and not a `daily`, that a 401 is not retried and raises an alert, that a 503 is retried once, that an input error is not retried, that a gold failure exits 4 and is not retried, that `parquet` and `invoice` reach gold, that a leftover `.tmp` folder is cleared, that a locked folder is skipped, and that no status line holds a key. Two more check, under umask 022 and 000, that the silver copy the job stages is readable by its owner only.
 
 ## Use it on a real account
+
+To run the job on Kubernetes, in a container or on a platform with a warehouse, start from the [integration guide](https://github.com/meyerx/meterline/blob/main/docs/integrate/README.md).
 
 Copy `job.example.toml`, set the paths, export the keys (see each connector's README) and `METERLINE_GOLD_KEY`, and run:
 
@@ -32,7 +34,7 @@ The job exits with the worst code of its steps. The table says what each code me
 | `1` | `transient` | Waits `retry_wait_seconds` (300) and runs the same command once more (`retries`, default 1). |
 | `2` | `input` | Does not retry; the line carries an `alert`. |
 | `3` | `permanent` | Does not retry; the line carries an `alert`. |
-| `4` | `build` | Gold's build failed. Never retried; the line carries an `alert`. This code belongs to the job: a connector never exits with it. |
+| `4` | `build` or `publish` | Gold's build failed (`build`) or the publish step failed (`publish`). Never retried; the line carries an `alert`. This code belongs to the job: a connector never exits with it. |
 
 A cron line for 06:30 each day:
 
@@ -77,7 +79,7 @@ If the run stops part way, the job retries it once after `retry_wait_seconds` wh
 
 The test builds gold with gold's example price list, which holds invented prices. If you copy that list for a real job, read both points first. They are also in the [cost cookbook](https://github.com/meyerx/meterline/blob/main/docs/how-to/finops-kpis.md#billed-consumption-and-reference-cost).
 
-- **A seat line can create a seat cost where there are no seats.** The example list has a seat price for `anthropic` of 27.00 a month with no `provider_account_id`. A line with no `provider_account_id` matches every organisation of that provider. When a provider sends no seat assignments, gold counts its seats from the rows of `identities.csv` for that provider, for the persons employed that day, whatever the actor kind. The Admin connector sends no seat assignments, and a Console organisation has no seats. So an Admin-fed build shows a seat count and a `seat_cost` for it, and `total_cost_ref` includes that cost. On the invented organisation of the tests, 20 identity rows give 540.00. Remove the Anthropic seat line from the price list you use, unless the organisation pays per seat. Scoping the line with `provider_account_id` is not enough when the silver holds more than one Anthropic organisation: the seat row then has an empty `provider_account_id`, and the line still matches.
+- **A seat line can create a seat cost where there are no seats.** The example list carries a seat price for `anthropic` of 27.00 a month with no `provider_account_id`, commented out for this reason. A line with no `provider_account_id` matches every organisation of that provider. When a provider sends no seat assignments, gold counts its seats from the rows of `identities.csv` for that provider, for the persons employed that day, whatever the actor kind. The Admin connector sends no seat assignments, and a Console organisation has no seats. So an Admin-fed build shows a seat count and a `seat_cost` for it, and `total_cost_ref` includes that cost. On the invented organisation of the tests, 20 identity rows would give 540.00 if the line were active. Keep the Anthropic seat line commented out or remove it from the price list you use, unless the organisation pays per seat. Scoping the line with `provider_account_id` is not enough when the silver holds more than one Anthropic organisation: the seat row then has an empty `provider_account_id`, and the line still matches.
 - **`usage_cost_ref` is a lower bound when a model has no price.** Gold sets the reference cost of a row from the price list. A row it cannot price has none: a model missing from the list, a model with no price for that day, or a row with no model. `costs_month` adds up the rows that have one, and shows `0.00` when none has. The row carries no flag, and `total_cost_ref` has the same gap. `central/data_quality.csv` counts the rows, as the metrics `rows_unpriced` and `rows_unknown_model`. Check them before you use `usage_cost_ref` as a total. The exec files carry no count.
 
 ## What this does not prove

@@ -17,9 +17,12 @@ except ImportError:  # Python 3.10
 # kind -> (import name, the extra of meterline-job that installs it)
 KINDS = {"anthropic": ("meterline_anthropic", "anthropic"), "anthropic_admin": ("meterline_anthropic_admin", "anthropic-admin"),
          "litellm": ("meterline_litellm", "litellm"), "copilot": ("meterline_copilot", "copilot")}
+# kind -> the ``provider`` its records carry (the connector's own PROVIDER constant; a test compares the two)
+PROVIDERS = {"anthropic": "anthropic", "anthropic_admin": "anthropic", "litellm": "litellm", "copilot": "github_copilot"}
 RESERVED_STEPS = ("silver", "gold", "publish")
 TOP_KEYS = ("data_root", "gold_root", "gold", "connector", "publish")
-PUBLISH_DEFAULTS = {"freeze_after_days": 4, "freeze_cap_extra_days": 10}
+PUBLISH_DEFAULTS = {"freeze_after_days": 4, "freeze_cap_extra_days": 10, "stale_after_days": 3, "keep_builds": 2}
+PUBLISH_MINIMUM = {"keep_builds": 1}  # every other [publish] setting may be 0
 GOLD_KEYS = ("org", "policy", "prices", "parquet", "invoice")
 JOB_CONNECTOR_KEYS = ("name", "kind", "since", "retries", "retry_wait_seconds")  # the rest are the connector's options
 
@@ -94,8 +97,9 @@ def _publish_problems(table: Any) -> List[str]:
         return ["[publish] must be a table"]
     out = ["unknown key %r under [publish]" % key for key in table if key not in PUBLISH_DEFAULTS]
     for key in PUBLISH_DEFAULTS:
-        if key in table and (isinstance(table[key], bool) or not isinstance(table[key], int) or table[key] < 0):
-            out.append("[publish] %s must be a whole number, 0 or more" % key)
+        least = PUBLISH_MINIMUM.get(key, 0)
+        if key in table and (isinstance(table[key], bool) or not isinstance(table[key], int) or table[key] < least):
+            out.append("[publish] %s must be a whole number, %d or more" % (key, least))
     return out
 
 

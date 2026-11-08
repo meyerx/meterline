@@ -2,7 +2,7 @@
 
 > meterline turns AI usage data from provider APIs (Anthropic Enterprise Analytics, Anthropic Admin, LiteLLM, GitHub Copilot) into one common record format, one line per usage event, and builds per-person and per-group datasets from those records with privacy rules applied. It is a batch tool you run yourself, with a simulator so everything can be tried without a key. Read gold, from the audience folder of the reader; silver holds per-person identifiers.
 
-Evidence levels as of 2026-10-30. The three levels are defined in [the glossary](https://github.com/meyerx/meterline/blob/main/docs/glossary.md#evidence-levels).
+The three evidence levels are defined in [the glossary](https://github.com/meyerx/meterline/blob/main/docs/glossary.md#evidence-levels); the date of the last live run is in the Status paragraph of the [README](https://github.com/meyerx/meterline/blob/main/README.md).
 `meterline-anthropic-admin`: verified live on a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen).
 `meterline-litellm`: built against documented shapes and checked against LiteLLM v1.106.6's own route code.
 `meterline-anthropic`: built against documented shapes.
@@ -13,6 +13,9 @@ No other connector has run against a live account. A real response may differ fr
 
 - [README](https://github.com/meyerx/meterline/blob/main/README.md): what meterline is, who it is for, quick start and known limits.
 - [Documentation index](https://github.com/meyerx/meterline/blob/main/docs/README.md): every document, grouped by goal.
+- [Integrate on your platform](https://github.com/meyerx/meterline/blob/main/docs/integrate/README.md): five scenarios from one machine to a data lake and a warehouse, with the maturity of every step.
+- [Integration scenarios](https://github.com/meyerx/meterline/blob/main/docs/integrate/scenarios.yaml): the same scenarios and steps as data.
+- [Containers, a data lake and a warehouse](https://github.com/meyerx/meterline/blob/main/docs/integrate/c-lake-and-warehouse.md): scenario C, with the warehouse rules and commented Snowflake, S3 and SES excerpts.
 - [Tutorial](https://github.com/meyerx/meterline/blob/main/docs/tutorial.md): from the simulator to gold to the example dashboard, with every command's output.
 - [Configure a gold policy](https://github.com/meyerx/meterline/blob/main/docs/how-to/configure-policy.md): group-size suppression, unit envelopes and scenarios.
 - [Add a provider](https://github.com/meyerx/meterline/blob/main/docs/how-to/add-a-provider.md): the steps for a new connector package, from a generated skeleton.
@@ -21,6 +24,7 @@ No other connector has run against a live account. A real response may differ fr
 - [meterline-anthropic-admin](https://github.com/meyerx/meterline/blob/main/packages/meterline-anthropic-admin/README.md): the Anthropic Admin Usage and Cost API of a Console organisation.
 - [meterline-litellm](https://github.com/meyerx/meterline/blob/main/packages/meterline-litellm/README.md): a LiteLLM proxy's admin API.
 - [meterline-copilot](https://github.com/meyerx/meterline/blob/main/packages/meterline-copilot/README.md): GitHub Copilot usage reports, billing and seats.
+- [meterline-job](https://github.com/meyerx/meterline/blob/main/packages/meterline-job/README.md): the daily job that runs the connectors, stages silver, builds gold and publishes, with its exit codes.
 - [Connector contract](https://github.com/meyerx/meterline/blob/main/docs/reference/connector-contract.md): the rules every connector keeps, with the conformance kit that checks them.
 
 ## Reference
@@ -29,6 +33,7 @@ No other connector has run against a live account. A real response may differ fr
 - [Gold datasets](https://github.com/meyerx/meterline/blob/main/docs/reference/gold-datasets.md): every gold file with its columns, units, key and which cost column to sum.
 - [Schemas](https://github.com/meyerx/meterline/blob/main/docs/schemas/README.md): JSON Schema for silver kinds, organisation inputs, every gold dataset and the audience rules.
 - [Audience rules](https://github.com/meyerx/meterline/blob/main/docs/schemas/gold-audiences.json): which gold file may be served to which reader.
+- [Job file schemas](https://github.com/meyerx/meterline/blob/main/docs/schemas/job/published.schema.json): `published.json` and `freshness.json` of the published folder, in `docs/schemas/job/`.
 - [Glossary](https://github.com/meyerx/meterline/blob/main/docs/glossary.md): every project term, defined once.
 - [Architecture](https://github.com/meyerx/meterline/blob/main/docs/architecture.md): bronze, silver and gold, and the audiences.
 - [Gold package](https://github.com/meyerx/meterline/blob/main/packages/meterline-gold/README.md): what a build writes, per audience folder.
@@ -40,6 +45,10 @@ No other connector has run against a live account. A real response may differ fr
 - [Simulated data to KPIs](https://github.com/meyerx/meterline/blob/main/examples/01-sim-to-kpis/README.md): runs the KPI queries on a simulated build.
 - [Static exec report](https://github.com/meyerx/meterline/blob/main/examples/02-exec-report/README.md): an HTML page from exec/ only, checking servable.
 - [Daily job](https://github.com/meyerx/meterline/blob/main/examples/03-daily-job/README.md): all connectors, then gold, with cron and systemd lines.
+- [The job in a container](https://github.com/meyerx/meterline/blob/main/examples/04-container/README.md): a Dockerfile, a Kubernetes CronJob and an ECS task definition.
+- [A minimal dashboard](https://github.com/meyerx/meterline/blob/main/examples/05-dashboard/README.md): serves one audience folder of the published gold folder.
+- [A warehouse layout on DuckDB](https://github.com/meyerx/meterline/blob/main/examples/06-warehouse-duckdb/README.md): one database file per audience, and a load that replaces the last build.
+- [One message per person](https://github.com/meyerx/meterline/blob/main/examples/07-person-messages/README.md): .eml files from the person folders, with sending locked.
 - [Operate the daily job](https://github.com/meyerx/meterline/blob/main/docs/how-to/operate-daily.md): order, locking, first-backfill durations and where to look on failure.
 - [Gold fixture](https://github.com/meyerx/meterline/blob/main/docs/gold-fixture/README.md): a small committed input and its expected gold output.
 

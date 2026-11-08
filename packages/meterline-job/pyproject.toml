@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "meterline-job"
-version = "0.1.0"
-description = "Runs the meterline connectors, stages silver and builds gold in one daily job, with one status line per step and an exit code per kind of failure."
+version = "0.2.0"
+description = "Runs the meterline connectors, stages silver, builds gold and publishes the result in one daily job, with one status line per step and an exit code per kind of failure."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 readme = "README.md"
@@ -15,7 +15,8 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "Operating System :: OS Independent",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
@@ -24,37 +25,38 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "meterline>=0.3",
-    "meterline-gold[parquet]>=0.2",
+    "meterline>=0.3.1,<0.4",
+    "meterline-gold[parquet]>=0.3.0,<0.4",
     "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.urls]
 Homepage = "https://github.com/meyerx/meterline"
+Documentation = "https://github.com/meyerx/meterline/blob/main/docs/README.md"
 Source = "https://github.com/meyerx/meterline/tree/main/packages/meterline-job"
 Issues = "https://github.com/meyerx/meterline/issues"
 Changelog = "https://github.com/meyerx/meterline/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-anthropic = ["meterline-anthropic>=0.2.1"]
-anthropic-admin = ["meterline-anthropic-admin>=0.1.1"]
-litellm = ["meterline-litellm>=0.1.1"]
-copilot = ["meterline-copilot>=0.1.1"]
+anthropic = ["meterline-anthropic>=0.2.2,<0.3"]
+anthropic-admin = ["meterline-anthropic-admin>=0.1.2,<0.2"]
+litellm = ["meterline-litellm>=0.1.2,<0.2"]
+copilot = ["meterline-copilot>=0.1.2,<0.2"]
 all = [
-    "meterline-anthropic>=0.2.1",
-    "meterline-anthropic-admin>=0.1.1",
-    "meterline-litellm>=0.1.1",
-    "meterline-copilot>=0.1.1",
+    "meterline-anthropic>=0.2.2,<0.3",
+    "meterline-anthropic-admin>=0.1.2,<0.2",
+    "meterline-litellm>=0.1.2,<0.2",
+    "meterline-copilot>=0.1.2,<0.2",
 ]
 dev = [
     "pytest>=8",
     "jsonschema>=4.18",
     "httpx>=0.27",
-    "meterline-sim>=0.1",
-    "meterline-anthropic>=0.2.1",
-    "meterline-anthropic-admin>=0.1.1",
-    "meterline-litellm>=0.1.1",
-    "meterline-copilot>=0.1.1",
+    "meterline-sim>=0.1.1,<0.2",
+    "meterline-anthropic>=0.2.2,<0.3",
+    "meterline-anthropic-admin>=0.1.2,<0.2",
+    "meterline-litellm>=0.1.2,<0.2",
+    "meterline-copilot>=0.1.2,<0.2",
     "pytest-xdist==3.8.0",
     "ruff==0.17.3",
 ]

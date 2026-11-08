@@ -11,6 +11,7 @@ An index by goal. Each entry is one line. New to the project? Read the [README](
 ## Run a connector on a real account
 
 - [The daily job](../examples/03-daily-job/README.md): run every connector from Python, then gold, with cron and systemd lines.
+- [Integrate on the platform you have](integrate/README.md): five scenarios from one machine to a data lake and a warehouse, with the maturity of every step (the pages: [A](integrate/a-one-machine.md), [B](integrate/b-kubernetes.md), [C](integrate/c-lake-and-warehouse.md), [D](integrate/d-gold-in-warehouse.md), [E](integrate/e-agents.md)), a [container example](../examples/04-container/README.md) and a [minimal dashboard](../examples/05-dashboard/README.md). For a data lake and a warehouse, [scenario C](integrate/c-lake-and-warehouse.md) comes with a [warehouse layout on DuckDB](../examples/06-warehouse-duckdb/README.md) and [one message per person](../examples/07-person-messages/README.md).
 - [Operate the daily job](how-to/operate-daily.md): the order of a run, which command to use, locking, how long a first backfill takes and where to look on failure.
 - [Run a connector](../README.md#run-a-connector): create a key (the narrowest the provider offers), put it in the environment, run `backfill`, `daily`, `rebuild`.
 - [Anthropic Enterprise analytics](../packages/meterline-anthropic/README.md): the Claude Enterprise Analytics API connector.

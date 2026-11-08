@@ -144,7 +144,7 @@ def test_a_composed_file_is_sorted_by_its_key_and_keeps_gold_s_header(tmp_path):
         keys = [header.index(c) for c in forms[(rel.parts[0], stem)][1]]
         assert rows == sorted(rows, key=lambda r: (tuple(r[i] for i in keys), r)), rel  # an empty cell sorts first as ""
         checked += 1
-    assert checked > 20 and {r[0] for r in read_csv(published(tmp_path) / "central" / "person_month.csv")[1]} == {"2.0"}
+    assert checked > 20 and {r[0] for r in read_csv(published(tmp_path) / "central" / "person_month.csv")[1]} == {"2.1"}
     # the rows of April are the frozen ones, the file has both months
     months = {r[1] for r in read_csv(published(tmp_path) / "central" / "person_month.csv")[1]}
     assert months == {"2026-04", "2026-05"} and month_rows(first, "2026-04")
@@ -227,7 +227,7 @@ def test_a_damaged_frozen_month_exits_4_and_leaves_published_alone(tmp_path, dam
         (frozen / "SHA256SUMS").unlink()
     make_build(tmp_path / "gold", "2026-05-05")
     result = run(tmp_path, today=date(2026, 5, 5), minutes=60)
-    assert result.exit_code == 4 and result.failure_kind == "build" and "frozen/2026-04" in result.error, result
+    assert result.exit_code == 4 and result.failure_kind == "publish" and "frozen/2026-04" in result.error, result
     assert target(tmp_path) == before and files(published(tmp_path)) == served
     assert sorted(p.name for p in (tmp_path / "gold").glob("published-*")) == [before]
 
@@ -409,3 +409,80 @@ def test_the_published_folder_never_holds_delivery_even_if_the_build_does(tmp_pa
     assert not list((tmp_path / "gold").glob("published-*/delivery"))
     digest = hashlib.sha256((tmp_path / "gold" / "builds" / "2026-05-03" / "delivery" / "directory.csv").read_bytes()).hexdigest()
     assert all(hashlib.sha256(p.read_bytes()).hexdigest() != digest for p in published(tmp_path).rglob("*") if p.is_file())
+
+
+# ---- v0.3 hardening A-12: publish refuses links planted in a build -------------------------------------------------------
+
+
+def test_a_link_planted_in_the_build_makes_publish_exit_4_and_keeps_published(tmp_path):
+    make_build(tmp_path / "gold", "2026-05-03")
+    assert run(tmp_path, today=date(2026, 5, 3)).exit_code == 0
+    before = target(tmp_path)
+    outside = tmp_path / "outside.csv"
+    outside.write_text("secret\n", encoding="utf-8")
+    build = make_build(tmp_path / "gold", "2026-05-04")
+    (build / "central" / "planted.csv").symlink_to(outside)
+    result = run(tmp_path, today=date(2026, 5, 4), minutes=5)
+    assert result.exit_code == 4 and result.failure_kind == "publish", result
+    assert "builds/2026-05-04/central/planted.csv" in result.error and "symbolic link" in result.error
+    assert target(tmp_path) == before and not [p for p in (tmp_path / "gold").glob("published-*") if p.name != before]
+
+
+def test_a_linked_folder_in_the_build_is_named_and_not_entered(tmp_path):
+    build = make_build(tmp_path / "gold", "2026-05-04")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "a.csv").write_text("x\n", encoding="utf-8")
+    (build / "exec" / "more").symlink_to(elsewhere, target_is_directory=True)
+    result = run(tmp_path)
+    assert result.exit_code == 4 and "builds/2026-05-04/exec/more" in result.error
+
+
+def test_a_link_planted_in_a_frozen_month_makes_publish_exit_4(tmp_path):
+    frozen = frozen_april(tmp_path)
+    before = target(tmp_path)
+    (frozen / "central" / "planted.csv").symlink_to(tmp_path / "outside.csv")
+    make_build(tmp_path / "gold", "2026-05-05")
+    result = run(tmp_path, today=date(2026, 5, 5), minutes=60)
+    assert result.exit_code == 4 and "frozen/2026-04/central/planted.csv" in result.error
+    assert target(tmp_path) == before
+
+
+# ---- v0.3 hardening A-13: old builds are pruned ----------------------------------------------------------------------------
+
+
+def test_five_daily_runs_keep_two_builds_and_only_the_newest_holds_delivery(tmp_path):
+    for day in range(4, 9):
+        make_build(tmp_path / "gold", "2026-05-%02d" % day)
+        result = run(tmp_path, today=date(2026, 5, day), minutes=day)
+        assert result.exit_code == 0, result
+    builds = sorted(p.name for p in (tmp_path / "gold" / "builds").iterdir())
+    assert builds == ["2026-05-07", "2026-05-08"]
+    assert (tmp_path / "gold" / "builds" / "2026-05-08" / "delivery" / "directory.csv").is_file()
+    assert not (tmp_path / "gold" / "builds" / "2026-05-07" / "delivery").exists()
+    assert (tmp_path / "gold" / "builds" / "2026-05-07" / "central").is_dir()  # the rest of a kept build stays
+    assert result.extra["pruned"] == ["2026-05-06"]
+    frozen = tmp_path / "gold" / "frozen" / "2026-04"
+    publish.verify_sums(frozen)  # frozen months do not depend on a build: untouched and still verifying
+    assert json.loads((tmp_path / "gold" / "frozen.json").read_text(encoding="utf-8"))["2026-04"]["source_build"] == "2026-05-04"
+
+
+def test_keep_builds_follows_the_setting_and_never_goes_below_one(tmp_path):
+    from meterline_job.config import ConfigError, parse_config
+
+    for day in range(4, 8):
+        make_build(tmp_path / "gold", "2026-05-%02d" % day)
+        assert run(tmp_path, today=date(2026, 5, day), minutes=day, keep_builds=3).exit_code == 0
+    assert sorted(p.name for p in (tmp_path / "gold" / "builds").iterdir()) == ["2026-05-05", "2026-05-06", "2026-05-07"]
+    base = (b'data_root = "d"\ngold_root = "g"\n[gold]\norg = "o"\npolicy = "p"\nprices = "x"\n'
+            b'[[connector]]\nname = "c"\nkind = "anthropic"\nsince = "2026-01-01"\n')
+    assert parse_config(base)["publish"]["keep_builds"] == 2
+    with pytest.raises(ConfigError, match="keep_builds must be a whole number, 1 or more"):
+        parse_config(base + b"[publish]\nkeep_builds = 0\n")
+
+
+def test_the_build_published_was_assembled_from_is_never_pruned(tmp_path):
+    older = make_build(tmp_path / "gold", "2026-05-03")
+    newer = make_build(tmp_path / "gold", "2026-05-04")
+    assert publish.prune_builds(tmp_path / "gold", 1, older) == []  # the build named as the source stays, whatever its age
+    assert older.is_dir() and newer.is_dir()

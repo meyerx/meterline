@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "The manifest of a gold folder, gold_schema_version 2.0. A key is added or changed only with a new GOLD_SCHEMA_VERSION. Generated from meterline_gold/write.py by meterline_gold.contract; do not edit by hand. Meaning of each key: the gold spec, section 9.3.",
+  "description": "The manifest of a gold folder, gold_schema_version 2.1. A key is added or changed only with a new GOLD_SCHEMA_VERSION. Generated from meterline_gold/write.py by meterline_gold.contract; do not edit by hand. Meaning of each key: the gold spec, section 9.3.",
   "properties": {
     "as_of": {
       "anyOf": [
@@ -44,7 +44,7 @@
       "type": "object"
     },
     "gold_schema_version": {
-      "const": "2.0"
+      "const": "2.1"
     },
     "input_flags": {
       "additionalProperties": false,

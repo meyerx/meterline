@@ -4,7 +4,7 @@ meterline helps people who run or pay for AI tools in an organisation see and co
 
 Each provider reports usage in its own shape, on its own dashboard, with its own meaning of tokens, cost and users, and keeps it for a limited time. meterline turns those reports into one JSON line per actor, product, model and period, plus optional Parquet. It keeps every response it read, so the records can be rebuilt. A second step builds per-person and per-group datasets that apply privacy rules before anyone reads them.
 
-**Status:** works end to end on simulated data. One connector has run against a live account; the others have not. The record format, the connectors (Anthropic Enterprise Analytics, Anthropic Admin, LiteLLM, GitHub Copilot), the simulator and the *gold* datasets (the tables built from the records for each audience, see [Architecture](docs/architecture.md)) are built and tested. Evidence levels as of 2026-10-30 (the three [evidence levels](docs/glossary.md#evidence-levels) are defined in the glossary): `meterline-anthropic-admin` is verified live on a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen). `meterline-litellm` is built against documented shapes and checked against LiteLLM v1.106.6's own route code. `meterline-anthropic` and `meterline-copilot` are built against documented shapes. Every connector is also tested against a fake API. Read [Known limits](#known-limits) before using it on real data.
+**Status:** works end to end on simulated data. One connector has run against a live account; the others have not. The record format, the connectors (Anthropic Enterprise Analytics, Anthropic Admin, LiteLLM, GitHub Copilot), the simulator and the *gold* datasets (the tables built from the records for each audience, see [Architecture](docs/architecture.md)) are built and tested. Date of the last live run: 2026-10-30. The three [evidence levels](docs/glossary.md#evidence-levels) are defined in the glossary: `meterline-anthropic-admin` is verified live on a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen). `meterline-litellm` is built against documented shapes and checked against LiteLLM v1.106.6's own route code. `meterline-anthropic` and `meterline-copilot` are built against documented shapes. Every connector is also tested against a fake API. Read [Known limits](#known-limits) before using it on real data.
 
 ## Who it is for
 
@@ -42,8 +42,9 @@ Pick the goal you have:
 - **Run a connector on a real account:** [Run a connector](#run-a-connector), then the [package READMEs](docs/README.md#run-a-connector-on-a-real-account).
 - **Build a dashboard from gold:** [the gold package](packages/meterline-gold/README.md) and the [policy how-to](docs/how-to/configure-policy.md).
 - **Add a provider:** [Adding a provider](#adding-a-provider) and the [how-to](docs/how-to/add-a-provider.md).
+- **Run it on the platform you have:** the [integration guide](docs/integrate/README.md), with five scenarios from one machine to a data lake and a warehouse, the maturity of every step, and a [container example](examples/04-container/README.md) and a [minimal dashboard](examples/05-dashboard/README.md). For a data lake and a warehouse, [scenario C](docs/integrate/c-lake-and-warehouse.md) comes with a [warehouse layout on DuckDB](examples/06-warehouse-duckdb/README.md) and [one message per person](examples/07-person-messages/README.md).
 
-The full index by goal is [`docs/README.md`](docs/README.md). Which layer to read: a dashboard reads **gold**, from the audience folder of its reader; silver is for building your own pipeline and holds per-person identifiers with no suppression.
+What changed in each repository version, who it is for and how to upgrade are on the [releases page](https://github.com/meyerx/meterline/releases). **Upgrading from 0.1:** the gold folder moved to `builds/`, `frozen/` and `published/`, so a reader of `<gold_root>/<date>` gets no new data, and the old dated folders keep person-level data under your retention rule; see [Upgrading from 0.1](CHANGELOG.md#upgrading-from-01). The full index by goal is [`docs/README.md`](docs/README.md). Which layer to read: a dashboard reads **gold**, from the audience folder of its reader; silver is for building your own pipeline and holds per-person identifiers with no suppression.
 
 ## Packages
 
@@ -74,6 +75,16 @@ python3 -m venv .venv
 ```
 
 The install takes a few minutes and the test run about twenty (the simulator's property tests are most of it). A healthy run prints a growing line of dots and ends with `passed` in the last line, with no `failed` or `error`. Two tests assert a wall-clock bound (`S14` in the simulator, `G21` in gold). Both are skipped when the environment variable `CI` is set, as it is on the CI runners. On a heavily loaded machine they can fail alone, so rerun them by name before suspecting anything else (unset `CI` to run them).
+
+### Install from PyPI
+
+To run the daily job without a clone, install it with the connectors you need and follow its README (the keys, the job file, the schedule):
+
+```sh
+pip install "meterline-job[all]"
+```
+
+The job README is [packages/meterline-job/README.md](packages/meterline-job/README.md). The clone-based quick start above is for trying meterline on simulated data and for running the tests.
 
 ### Try it without a key
 
@@ -165,11 +176,12 @@ packages/meterline-copilot/         GitHub Copilot connector, CLI, tests (fake G
 packages/meterline-sim/             simulated organisation and usage generator, CLI, presets, price table, tests
 packages/meterline-gold/            per-person, per-group and per-audience datasets from silver, CLI, example dashboard, tests
 packages/meterline-job/             the daily job: connectors, silver, gold; CLI, tests (fake APIs, synthetic rows)
-examples/                           three runnable examples on simulated data: FinOps KPIs, a static exec report, the daily job
+examples/                           five runnable examples on simulated data: FinOps KPIs, a static exec report, the daily job, the job in a container, a minimal dashboard
 docs/
   README.md                                     the index by goal: simulated data, a real account, a dashboard, a new provider
   tutorial.md                                   from the simulator to gold to the dashboard, with every command's output
   how-to/                                       configure a gold policy; add a provider
+  integrate/                                    run meterline on the platform you have: five scenarios with a maturity mark per step, and scenarios.yaml
   glossary.md                                   every project term, defined once, and the evidence levels
   architecture.md                               the layers from the provider APIs to the audiences, as one diagram
   decisions/                                    one record per structural choice of the format, with its alternatives
@@ -201,7 +213,7 @@ meterline is an independent project. It is not affiliated with, endorsed by or s
 
 These limits apply to meterline as a whole, grouped by kind. Each package README has its own Known limits section, next to the claims it qualifies.
 
-**Mostly not verified.** As of 2026-10-30, only `meterline-anthropic-admin` has run against a live account, and that was a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen). `meterline-anthropic`, `meterline-litellm` and `meterline-copilot` are at the evidence level built against documented shapes. Each connector README says what to do when a live response differs.
+**Mostly not verified.** Only `meterline-anthropic-admin` has run against a live account, and that was a small Console organisation (one model, two days of usage; cache tokens, priority tier and several workspaces not yet seen). `meterline-anthropic`, `meterline-litellm` and `meterline-copilot` are at the evidence level built against documented shapes. Each connector README says what to do when a live response differs.
 
 **Not in the source APIs.** Some facts no provider API gives, so no record holds them: for Anthropic, Claude Code used through Amazon Bedrock, seat fees and the effort level (see [the Anthropic README](packages/meterline-anthropic/README.md#known-limits)).
 

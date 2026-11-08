@@ -13,13 +13,16 @@ from package_list import ROOT  # noqa: E402
 RULE = (
     "A month is refreshed on every published run until it is frozen, which happens once every source has final data for it "
     "and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at "
-    "the next run; from then on it is delivered once and does not change, except that an erased person's rows are removed, "
-    "and after a change of the hashing key manager and person folders show only months frozen under the new key. Serve only "
-    "the `published` folder, never `builds/` or `frozen/`, and give managers and executives only its latest state; keeping "
-    "earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can "
-    "sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an "
-    "organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception "
-    "that appears and then disappears. The adopter accepts this risk and has it validated by its data protection officer."
+    "the next run; from then on it is delivered once and does not change, except that the manual erasure procedure removes "
+    "an erased person's rows (the tool has no erase command), and after a change of the hashing key manager and person "
+    "folders show only months frozen under the new key. Each reader receives only their own sub-folder of `published/`, as "
+    "`servable(path, audience)` says, never `builds/` or `frozen/`, and managers and executives are given only its latest "
+    "state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an "
+    "in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when "
+    "a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a "
+    "named exception that appears and then disappears; and a recipient who kept an earlier version of a month can compare it "
+    "with the version delivered again after a correction. The adopter decides before go-live whether to accept these risks, "
+    "records the decision and has it validated by its data protection officer."
 )
 FOUR = ["packages/meterline-gold/README.md", "docs/PRIVACY.md", "docs/THREAT-MODEL.md", "docs/how-to/operate-daily.md"]
 
@@ -100,5 +103,6 @@ def test_the_changelog_records_the_gold_accessors_the_job_step_and_the_docs():
     assert "write_parquet_text" in gold and "dataset_forms" in gold and "policy_privacy" in gold
     assert "`publish` step" in job and "freshness.json" in job
     assert "delivery rule" in job
-    for word in ("write_parquet_text", "freshness.json", "delivery rule"):
+    # `freshness.json` is not on the list: the v0.3 entries of meterline-job name its new fields, which are new
+    for word in ("write_parquet_text", "delivery rule"):
         assert word not in unreleased, "%s belongs in a dated section, not in [Unreleased]" % word

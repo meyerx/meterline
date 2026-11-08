@@ -63,8 +63,8 @@ The first hour of the new repository, in this order:
 8. Turn on branch protection for `main` (a ruleset): pull request required, no force pushes, no deletion, and these
    status checks required. The name to type is the second column; the `tests` job runs on Python 3.12 and 3.10 on the
    weekly and manual runs, but only on 3.12 on a pull request, so require `tests (python 3.12)` and never the 3.10 one,
-   which a pull request does not create and so would wait for for ever. `minimum-versions` and `quickstart` are skipped
-   on most pull requests, and `audit` and `dashboard-a11y` on a pull request that changes only prose the package tests
+   which a pull request does not create and so would wait for for ever. `minimum-versions`, `quickstart` and `container` are
+   skipped on most pull requests, and `audit` and `dashboard-a11y` on a pull request that changes only prose the package tests
    do not read (`tools/ci_suite.py`); GitHub counts a skipped check as passed. `tests` always runs, so its check
    always arrives; on such a pull request it runs fewer tests. Keep `changes` required: when it fails, the jobs that
    need it are skipped, and only its own red check stops the merge. A push to `main` runs the light jobs only, so
@@ -77,6 +77,7 @@ The first hour of the new repository, in this order:
    | `tests` | tests (python 3.12) |
    | `minimum-versions` | minimum versions (python 3.10, lowest direct dependencies) |
    | `quickstart` | quick start (the README commands, fresh venv) |
+   | `container` | container (example 04 image, simulated data) |
    | `audit` | dependency audit (pip-audit) |
    | `lint` | lint (ruff) |
    | `dashboard-a11y` | dashboard accessibility (axe-core 4.10) |
@@ -84,6 +85,14 @@ The first hour of the new repository, in this order:
 
 9. Settings > Actions > General: require approval for all outside collaborators before a workflow of their pull
    request runs.
+
+   Settings > Actions > General: require actions to be pinned to a full-length commit SHA. Every action in this
+   repository's workflows is pinned that way already, so the setting only makes GitHub refuse one that is not. Check that
+   it is on with `gh api repos/meyerx/meterline/actions/permissions --jq .sha_pinning_required`, which prints `true`.
+
+   Settings > General: automatically delete head branches. Each export lands as a pull request from a branch named
+   after the tag, and without the setting the branch stays after the merge. Check that it is on with
+   `gh api repos/meyerx/meterline --jq .delete_branch_on_merge`, which prints `true`.
 10. Set the repository description (the first sentence of the README) and the topics.
 11. Create the `pypi` environment and register the pending publishers (see "Publishing to PyPI", once, before the
     first release).
@@ -199,6 +208,9 @@ built from a tag of the private repository.
 4. Push the new branch to the public repository and open a pull request there with the fixed body ("Public text" below).
    Merge it with a merge commit, not a squash, when CI is green, so the export commit and its `Export-Tag:` line stay in the history.
 5. Release on PyPI as "Each release" describes.
+6. Write the version's release note and publish it. The note says who it is for, what changed, upgrading from the previous repository version, and what it still does not do (known limits). Publish it as a GitHub release named `meterline vX.Y` on a tag `vX.Y` on public `main`, after the export merge. The tag is `vX.Y` and not `export/vX.Y`: the public repository holds a branch named `export/vX.Y` after each export, and a tag and a branch of the same name make `git checkout` ambiguous. A tag that matches `meterline*-v*` would start the package release job, so never tag the repository version with a name that starts with `meterline`. The README's front page links the releases page, where the note is found.
+
+Before each export pull request, check the two settings of the first hour (step 9 above), and turn on what is off: Settings > Actions > General: require actions to be pinned to a full-length commit SHA (`gh api repos/meyerx/meterline/actions/permissions --jq .sha_pinning_required` prints `true`), and Settings > General: automatically delete head branches (`gh api repos/meyerx/meterline --jq .delete_branch_on_merge` prints `true`). Once the second is on, delete the leftover public branch `export/v0.2` (`gh api -X DELETE repos/meyerx/meterline/git/refs/heads/export/v0.2`). The maintainer turns these on; no build or session changes a repository setting.
 
 Porting an outside contribution back: on the public repository, run `git format-patch` for the merged commits since the
 last export commit. In the private repository, apply them with `git am` on a branch and open a pull request.
@@ -321,5 +333,6 @@ notices.
 
     - What the release still does not do or has not been checked against.
 
-Between releases, Dependabot opens weekly pull requests for the pinned actions and for the dependencies, and the
+Between releases, Dependabot opens weekly pull requests for the pinned actions and for the dependencies in the maintainer's
+working repository (the public repository gets Dependabot alerts only, and no pull requests from it), and the
 `audit` CI job runs `pip-audit` on every pull request that changes more than prose, and on the weekly run.

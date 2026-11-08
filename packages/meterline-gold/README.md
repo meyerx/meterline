@@ -179,12 +179,12 @@ The delivery rule, word for word as `meterline-job`, `PRIVACY.md` and `THREAT-MO
 
 | Delivery rule |
 |---|
-| A month is refreshed on every published run until it is frozen, which happens once every source has final data for it and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at the next run; from then on it is delivered once and does not change, except that an erased person's rows are removed, and after a change of the hashing key manager and person folders show only months frozen under the new key. Serve only the `published` folder, never `builds/` or `frozen/`, and give managers and executives only its latest state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception that appears and then disappears. The adopter accepts this risk and has it validated by its data protection officer. |
+| A month is refreshed on every published run until it is frozen, which happens once every source has final data for it and `freeze_after_days` have passed, or at the latest `freeze_after_days + freeze_cap_extra_days` days after its end at the next run; from then on it is delivered once and does not change, except that the manual erasure procedure removes an erased person's rows (the tool has no erase command), and after a change of the hashing key manager and person folders show only months frozen under the new key. Each reader receives only their own sub-folder of `published/`, as `servable(path, audience)` says, never `builds/` or `frozen/`, and managers and executives are given only its latest state; keeping earlier states is the adopter's choice, not the tool's. A reader who keeps every refresh of an in-progress month can sometimes learn one person's usage between two refreshes, one person's month-to-date amount when a correction or an organisation change moves that person, a cell published in one refresh and hidden in the next, or a named exception that appears and then disappears; and a recipient who kept an earlier version of a month can compare it with the version delivered again after a correction. The adopter decides before go-live whether to accept these risks, records the decision and has it validated by its data protection officer. The table of who receives which folder is [Who gets which folder](#who-gets-which-folder). |
 
 **How a build behaves.** These follow from how the build writes its output:
 
 - **A leftover temporary folder stops the next build.** A build writes into `<out>.tmp` and renames it at the end. A build that was killed can leave `<out>.tmp` behind; the next build to the same `--out` then stops with exit 2 ("a leftover temporary folder is in the way"). Delete the `.tmp` folder and build again.
-- **No delivery.** Gold writes `delivery/directory.csv` for a sender that is out of scope: nothing sends a folder to its audience or checks who opened it.
+- **No delivery.** Gold writes `delivery/directory.csv` for a sender, which is out of scope: nothing sends a folder to its audience or checks who opened it. [Example 07](https://github.com/meyerx/meterline/blob/main/examples/07-person-messages/README.md) is an adopter's sender, written as an example and not part of meterline: it reads the directory in place on the central side and writes one message per person, and its sending is locked.
 
 **Not verified.** Gold has run on the hand-built fixture and on simulated data only, never on a real organisation's silver.
 
@@ -194,10 +194,10 @@ The delivery rule, word for word as `meterline-job`, `PRIVACY.md` and `THREAT-MO
 
 ```sh
 cp src/meterline_gold/dashboard/index.html gold/exec/
-cd gold/exec && python3 -m http.server 8000
+cd gold/exec && python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-With `meterline-job`, serve the `published` folder, never `builds/` or `frozen/`: copy the file into `<gold_root>/published/exec/` and run `cd <gold_root>/published/exec && python3 -m http.server 8000`. Each run assembles a new folder, so copy the file again after a run, or let your web server add it. The folder holds only the latest published state: give managers and executives that and nothing earlier.
+The server listens on the local machine only (`--bind 127.0.0.1`), and the dashboard has no sign-in. For shared use put your own login in front of it, such as a reverse proxy that authenticates the reader and passes only that reader's folder. With `meterline-job`, an executive's folder is `<gold_root>/published/exec`, never `builds/` or `frozen/`: copy the file into it and run `cd <gold_root>/published/exec && python3 -m http.server 8000 --bind 127.0.0.1`. Each run assembles a new folder, so copy the file again after a run, or let your web server add it. The folder holds only the latest published state: give managers and executives that and nothing earlier.
 
 It shows each file as a table in the file's own row order, offers no sort on a measure and computes no figure. In a file with a `hidden` column it shows an empty covered value of a `hidden` = `true` row as `hidden`, and leaves an empty value of a `hidden` = `false` row blank. Never serve the gold root or `delivery/`.
 

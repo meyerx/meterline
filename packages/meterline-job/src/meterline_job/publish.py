@@ -16,6 +16,11 @@ publish freezes it from the latest build whatever the sources say, and says so (
 
 Exit codes of the step: 0 done; 1 the gold-root lock is held (set by the caller); 2 not supported on this platform;
 4 any other failure, the previous ``published`` folder staying as it was.
+
+Two things a caller of ``run_publish`` should know. The process umask is set to 077 while the step runs and put back
+afterwards: it is process-wide, so another thread of the same process that creates a file in that time gets a private
+file too. And no symbolic link is followed: ``assemble`` refuses a link anywhere in the build it copies from or in a
+frozen month (exit 4, naming the path), so a link planted in a build cannot pull a file from outside it into ``published``.
 """
 import csv
 import hashlib
@@ -24,15 +29,20 @@ import os
 import re
 import shutil
 import stat
+import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from meterline.run import last_published_pull
+from meterline_job.config import PROVIDERS, PUBLISH_DEFAULTS
+
 PRIVATE_UMASK = 0o077  # files 0600, folders 0700
 EXIT_PUBLISH = 4
 BUILDS, FROZEN = "builds", "frozen"
 SUMS = "SHA256SUMS"
+MARKER = "FROZEN.json"  # written inside a month's folder before the rename: the entry frozen.json will get
 NON_FINAL_DATASETS = ("person_day", "person_month", "pools_month", "groups_month")  # the central files that carry is_final
 DEFAULT_AFTER, DEFAULT_CAP_EXTRA = 4, 10
 _BUILD_NAME = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:-(\d+))?$")
@@ -46,10 +56,13 @@ class PublishError(Exception):
 @dataclass
 class Context:
     """What one run tells the step: the UTC day it belongs to, the clock for timestamps, and whether it ran every
-    connector step and each succeeded (only such a run freezes a month on the normal rule)."""
+    connector step and each succeeded (only such a run freezes a month on the normal rule). ``source_steps`` maps a
+    source's name to ``(ok, failure_kind)`` of its connector step in this run; a source that did not run in this
+    invocation (a run of one step) is not in it."""
     today: date
     now: Callable[[], datetime]
     run_complete: bool = False
+    source_steps: Dict[str, Tuple[bool, str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -170,6 +183,10 @@ def settings(config: Dict[str, Any]) -> Tuple[int, int]:
     return table.get("freeze_after_days", DEFAULT_AFTER), table.get("freeze_cap_extra_days", DEFAULT_CAP_EXTRA)
 
 
+def stale_after_days(config: Dict[str, Any]) -> int:
+    return (config.get("publish") or {}).get("stale_after_days", PUBLISH_DEFAULTS["stale_after_days"])
+
+
 # ---- P2: freezing ---------------------------------------------------------------------------------------------------
 
 
@@ -185,16 +202,46 @@ def data_complete_through(config: Dict[str, Any]) -> Optional[date]:
 
     A connector whose state cannot be read counts as having no final data: the answer is then the conservative one,
     and the month waits (or is forced by the cap)."""
-    days = []
+    return _through([_complete_through(spec, config) for spec in config["connector"]])
+
+
+def _complete_through(spec: Dict[str, Any], config: Dict[str, Any]) -> Tuple[Optional[date], bool]:
+    """``(day, raised)`` for one source: its ``complete_through``, and whether asking raised (then the day is ``None``)."""
+    try:
+        return connector_complete_through(spec, Path(config["data_root"]) / spec["name"]), False
+    except Exception:  # noqa: BLE001 - a damaged state file or a missing package must not stop the publish
+        return None, True
+
+
+def _through(answers: List[Tuple[Optional[date], bool]]) -> Optional[date]:
+    days = [day for day, _ in answers]
+    return None if not days or None in days else min(days)
+
+
+def source_status(config: Dict[str, Any], ctx: "Context") -> Tuple[List[Dict[str, Any]], Optional[date], List[str], List[str]]:
+    """``(sources, through, stale, unavailable)``: one entry per configured source, the earliest ``complete_through``,
+    the names of the stale sources and those whose ``complete_through`` raised.
+
+    A source is stale when its step failed in this run, or its ``complete_through`` is more than ``stale_after_days``
+    before the run's day. A source that is not stale by either rule is never reported as stale for a missing answer."""
+    limit = stale_after_days(config)
+    entries, answers, stale, unavailable = [], [], [], []
     for spec in config["connector"]:
-        try:
-            day = connector_complete_through(spec, Path(config["data_root"]) / spec["name"])
-        except Exception:  # noqa: BLE001 - a damaged state file or a missing package must not stop the publish
-            return None
-        if day is None:
-            return None
-        days.append(day)
-    return min(days) if days else None
+        name = spec["name"]
+        day, raised = _complete_through(spec, config)
+        answers.append((day, raised))
+        if raised:
+            unavailable.append(name)
+        step = ctx.source_steps.get(name)
+        last_ok = last_published_pull(Path(config["data_root"]) / name)
+        entries.append({"name": name, "provider": PROVIDERS.get(spec["kind"]),
+                        "step_ok": None if step is None else step[0],
+                        "last_ok_run": None if last_ok is None else last_ok.astimezone(timezone.utc).isoformat(),
+                        "complete_through": None if day is None else day.isoformat(),
+                        "failure_kind": None if step is None else step[1]})
+        if (step is not None and not step[0]) or (day is not None and (ctx.today - day).days > limit):
+            stale.append(name)
+    return entries, _through(answers), stale, unavailable
 
 
 def non_final_months(build: Path) -> set:
@@ -227,8 +274,11 @@ def _month_files(build: Path) -> List[Path]:
     return out
 
 
-def _freeze_one(gold_root: Path, build: Path, month: str) -> None:
-    """Write the rows of ``month`` of every month-keyed file of ``build`` to ``frozen/<month>.tmp``, then rename."""
+def _freeze_one(gold_root: Path, build: Path, month: str, entry: Dict[str, Any]) -> None:
+    """Write the rows of ``month`` of every month-keyed file of ``build`` to ``frozen/<month>.tmp``, then rename.
+
+    The folder also holds ``FROZEN.json``: the month and the entry ``frozen.json`` gets, written before the checksums are
+    made and the folder is renamed, so a crash between the rename and the write of ``frozen.json`` can be recovered."""
     final, tmp = gold_root / FROZEN / month, gold_root / FROZEN / (month + ".tmp")
     shutil.rmtree(tmp, ignore_errors=True)
     for path in _month_files(build):
@@ -243,6 +293,7 @@ def _freeze_one(gold_root: Path, build: Path, month: str) -> None:
             writer = csv.writer(handle, lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
             writer.writerow(header)
             writer.writerows(rows)
+    _write_json(tmp / MARKER, dict(entry, month=month))
     write_sums(tmp)
     os.replace(tmp, final)
 
@@ -256,6 +307,35 @@ def _privacy(config: Dict[str, Any], manifest: Dict[str, Any]) -> Optional[Dict[
     except Exception:  # noqa: BLE001 - an unreadable policy file must not stop a freeze; the entry then says unknown
         return None
     return params if digest == (manifest.get("inputs") or {}).get("policy_sha256") else None
+
+
+def recover_frozen(gold_root: Path, frozen: Dict[str, Dict[str, Any]]) -> List[str]:
+    """Give the entry back to a month that was renamed into ``frozen/`` and never got its ``frozen.json`` entry.
+
+    That is the one gap of a freeze (a crash between the rename and the write of ``frozen.json``). A folder under
+    ``frozen/`` with no entry is recovered when its ``SHA256SUMS`` verifies and its ``FROZEN.json`` parses and names the
+    month: the entry is rebuilt from the marker, ``frozen.json`` is written, and ``frozen_entry_recovered <month>`` is
+    returned. A folder whose sums or marker fail is not touched and stops the publish (``PublishError``: exit 4)."""
+    recovered = []
+    root = gold_root / FROZEN
+    for folder in sorted(root.iterdir()) if root.is_dir() else []:
+        month = folder.name
+        if not _MONTH.match(month) or not folder.is_dir() or month in frozen:
+            continue
+        try:
+            verify_sums(folder)
+            marker = json.loads((folder / MARKER).read_text(encoding="utf-8"))
+            if not isinstance(marker, dict) or marker.pop("month", None) != month or "source_build" not in marker:
+                raise ValueError("it does not name the month or its source build")
+        except (PublishError, OSError, ValueError) as exc:
+            raise PublishError("%s/%s exists and frozen.json has no entry for %s, and it cannot be recovered (%s); look at "
+                               "it, then move it away or add the entry; a month is never frozen over a folder"
+                               % (FROZEN, month, month, exc)) from exc
+        frozen[month] = marker
+        recovered.append("frozen_entry_recovered " + month)
+    if recovered:
+        _write_json(gold_root / "frozen.json", frozen)
+    return recovered
 
 
 def freeze_months(config: Dict[str, Any], ctx: Context, build: Path, manifest: Dict[str, Any],
@@ -288,7 +368,6 @@ def freeze_months(config: Dict[str, Any], ctx: Context, build: Path, manifest: D
         if (gold_root / FROZEN / month).exists():
             raise PublishError("%s/%s already exists and frozen.json has no entry for %s; look at it, then move it away "
                                "or add the entry; a month is never frozen over a folder" % (FROZEN, month, month))
-        _freeze_one(gold_root, build, month)
         entry = {"source_build": build.name, "key_check": manifest.get("key_check"),
                  "policy_sha256": (manifest.get("inputs") or {}).get("policy_sha256"),
                  "schema_version": manifest.get("gold_schema_version"),
@@ -296,11 +375,13 @@ def freeze_months(config: Dict[str, Any], ctx: Context, build: Path, manifest: D
                  "privacy": _privacy(config, manifest)}
         if month == min(manifest["months"]) and since is not None and since > month + "-01":
             entry["partial_start"] = True  # the data starts after the first day of the first month of the build
+        _freeze_one(gold_root, build, month, entry)
         frozen[month] = entry
         _write_json(gold_root / "frozen.json", frozen)  # after each month: a rename done and an entry missing is the one gap
         done.append(month)
         if forced:
             warnings.append("forced_freeze " + month)
+            print("warning: forced_freeze %s" % month, file=sys.stderr)
     return done, warnings
 
 
@@ -378,13 +459,33 @@ def compose_file(build: Path, rel: Path, target: Path, frozen_root: Path, shadow
         write_parquet_text((target / rel).with_suffix(".parquet"), schema_name, header, merged)
 
 
+def refuse_links(folder: Path) -> None:
+    """Raise ``PublishError`` naming the first symbolic link in ``folder`` (the folder itself, a file or a folder under it).
+
+    Walks with ``lstat`` and never follows a link, so a link to a folder is named and not entered."""
+    for root, folders, names in os.walk(folder, followlinks=False):
+        for name in sorted(folders + names):
+            path = Path(root) / name
+            if stat.S_ISLNK(path.lstat().st_mode):
+                raise PublishError("%s is a symbolic link; a build or a frozen month holds none, and publish copies none"
+                                   % path.relative_to(folder.parent.parent).as_posix())
+    if folder.is_symlink():
+        raise PublishError("%s is a symbolic link; a build or a frozen month holds none, and publish copies none" % folder.name)
+
+
 def assemble(config: Dict[str, Any], ctx: Context, build: Path, manifest: Dict[str, Any],
              frozen: Dict[str, Dict[str, Any]], destination: Path) -> None:
-    """Build the published folder at ``destination`` (which does not exist) from the latest build and ``frozen/``."""
+    """Build the published folder at ``destination`` (which does not exist) from the latest build and ``frozen/``.
+
+    Refuses (``PublishError``, exit 4) a symbolic link anywhere in the build or in a frozen month before it copies a file."""
     from meterline_gold import dataset_forms
 
     forms = dataset_forms()
     gold_root = Path(config["gold_root"])
+    refuse_links(build)
+    for month in sorted(frozen):
+        if (gold_root / FROZEN / month).exists() or (gold_root / FROZEN / month).is_symlink():
+            refuse_links(gold_root / FROZEN / month)
     shadowed = set(frozen)
     destination.mkdir()
     for path in sorted(build.rglob("*")):
@@ -468,28 +569,32 @@ def _dump(path: Path, obj: Any) -> None:
 
 
 def write_freshness(destination: Path, ctx: Context, build: Path, manifest: Dict[str, Any],
-                    frozen: Dict[str, Dict[str, Any]], through: Optional[date], warnings: List[str]) -> None:
+                    frozen: Dict[str, Dict[str, Any]], through: Optional[date], warnings: List[str],
+                    sources: Optional[List[Dict[str, Any]]] = None, stale: Optional[List[str]] = None) -> None:
     """``central/published.json`` and a ``freshness.json`` in every other audience folder."""
     stamp = ctx.now().astimezone(timezone.utc).isoformat()
     latest_key = manifest.get("key_check")
     policy = {build.name: (manifest.get("inputs") or {}).get("policy_sha256")}
     policy.update({entry["source_build"]: entry.get("policy_sha256") for entry in frozen.values()})
+    data_through = None if through is None else through.isoformat()
     _dump(destination / "central" / "published.json", {
         "latest_build": build.name,
-        "data_complete_through": None if through is None else through.isoformat(),
+        "data_complete_through": data_through,
         "published_at": stamp,
         "frozen_months": sorted(frozen),
         "in_progress_months": [m for m in manifest["months"] if m not in frozen],
         "forced_freezes": sorted(m for m, entry in frozen.items() if entry.get("forced")),
         "key_rotations": sorted(m for m, entry in frozen.items() if entry.get("key_check") != latest_key),
         "policy_sha256": policy,
+        "sources": list(sources or []),
         "warnings": list(warnings),
     })
     folders = [(destination / "exec", frozen_months_for("exec", latest_key, frozen))]
     for audience in ("manager", "person"):
         folders += [(path, frozen_months_for(audience, latest_key, frozen)) for path in sorted((destination / audience).glob("*"))]
     for folder, months in folders:
-        _dump(folder / "freshness.json", {"published_at": stamp, "frozen_months": months})
+        _dump(folder / "freshness.json", {"published_at": stamp, "frozen_months": months, "data_through": data_through,
+                                          "stale_sources": list(stale or [])})
 
 
 def policy_warnings(config: Dict[str, Any], manifest: Dict[str, Any], frozen: Dict[str, Dict[str, Any]]) -> List[str]:
@@ -509,7 +614,8 @@ def policy_warnings(config: Dict[str, Any], manifest: Dict[str, Any], frozen: Di
 
 
 def publish_folder(config: Dict[str, Any], ctx: Context, build: Path, manifest: Dict[str, Any],
-                   frozen: Dict[str, Dict[str, Any]], through: Optional[date], warnings: List[str]) -> str:
+                   frozen: Dict[str, Dict[str, Any]], through: Optional[date], warnings: List[str],
+                   sources: Optional[List[Dict[str, Any]]] = None, stale: Optional[List[str]] = None) -> str:
     """Verify the frozen months, assemble a new ``published-<timestamp>`` folder, check it, swap it in; returns its name.
 
     Any failure removes the half-made folder and leaves ``published`` as it was."""
@@ -522,7 +628,7 @@ def publish_folder(config: Dict[str, Any], ctx: Context, build: Path, manifest: 
     destination = gold_root / name
     try:
         assemble(config, ctx, build, manifest, frozen, destination)
-        write_freshness(destination, ctx, build, manifest, frozen, through, warnings)
+        write_freshness(destination, ctx, build, manifest, frozen, through, warnings, sources, stale)
         loose = private_violations(destination)
         if loose:
             raise PublishError("%s is not private: %s" % (name, "; ".join(loose[:3])))
@@ -537,6 +643,32 @@ def publish_folder(config: Dict[str, Any], ctx: Context, build: Path, manifest: 
     return name
 
 
+# ---- old builds -----------------------------------------------------------------------------------------------------
+
+
+def keep_builds(config: Dict[str, Any]) -> int:
+    return (config.get("publish") or {}).get("keep_builds", PUBLISH_DEFAULTS["keep_builds"])
+
+
+def prune_builds(gold_root: Any, keep: int, published_from: Path) -> List[str]:
+    """After a successful publish: delete every build under ``builds/`` except the newest ``keep``; return their names.
+
+    The build ``published`` was assembled from (``published_from``) is never deleted. From every kept build other than the
+    newest, ``delivery/`` is deleted (it holds the directory with names and addresses); the rest of such a build stays.
+    Frozen months do not depend on a build folder, so they are not touched."""
+    builds = [folder for _, folder in list_builds(gold_root)]
+    kept = builds[-keep:] if keep > 0 else []
+    removed = []
+    for folder in builds:
+        if folder in kept or folder == published_from:
+            continue
+        shutil.rmtree(folder, ignore_errors=True)
+        removed.append(folder.name)
+    for folder in kept[:-1]:
+        shutil.rmtree(folder / "delivery", ignore_errors=True)
+    return removed
+
+
 # ---- the step -------------------------------------------------------------------------------------------------------
 
 
@@ -548,9 +680,9 @@ def run_publish(config: Dict[str, Any], ctx: Context) -> Outcome:
     try:
         return _publish(config, ctx)
     except PublishError as exc:
-        return Outcome(EXIT_PUBLISH, "build", str(exc))
+        return Outcome(EXIT_PUBLISH, "publish", str(exc))
     except OSError as exc:
-        return Outcome(EXIT_PUBLISH, "build", "%s: %s" % (type(exc).__name__, exc))
+        return Outcome(EXIT_PUBLISH, "publish", "%s: %s" % (type(exc).__name__, exc))
     finally:
         os.umask(old_umask)
 
@@ -562,12 +694,15 @@ def _publish(config: Dict[str, Any], ctx: Context) -> Outcome:
         raise PublishError("there is no build under %s/%s: run the gold step first" % (gold_root.name, BUILDS))
     manifest = read_manifest(build)
     frozen = read_frozen(gold_root)
+    recovered = recover_frozen(gold_root, frozen)
     for month, entry in frozen.items():
         if entry.get("schema_version") != manifest.get("gold_schema_version"):
             raise PublishError("frozen month %s holds schema_version %s rows and the latest build is %s; migrating frozen "
                                "rows is out of scope" % (month, entry.get("schema_version"), manifest.get("gold_schema_version")))
-    through = data_complete_through(config)
+    sources, through, stale, unavailable = source_status(config, ctx)
     done, warnings = freeze_months(config, ctx, build, manifest, frozen, through)
-    warnings = warnings + policy_warnings(config, manifest, frozen)
-    folder = publish_folder(config, ctx, build, manifest, frozen, through, warnings)
-    return Outcome(extra={"build": build.name, "frozen": done, "warnings": warnings, "published": folder})
+    warnings = (recovered + warnings + policy_warnings(config, manifest, frozen) + ["stale_source " + name for name in stale]
+                + ["complete_through_unavailable " + name for name in unavailable])
+    folder = publish_folder(config, ctx, build, manifest, frozen, through, warnings, sources, stale)
+    pruned = prune_builds(gold_root, keep_builds(config), build)
+    return Outcome(extra={"build": build.name, "frozen": done, "warnings": warnings, "published": folder, "pruned": pruned})

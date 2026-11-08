@@ -29,7 +29,9 @@ jobs:
   #   pyproject.toml (it is the job that proves the declared lower bounds);
   # - a push to main (a merge) runs the light jobs and the commit-message check only: the pull request already ran
   #   the tests on that code;
-  # - the weekly schedule and manual runs run everything: both pythons, minimum-versions and quickstart.
+  # - the container job builds and runs example 04's image on GitHub's hosted Ubuntu runner, which has Docker:
+  #   on a pull request that changes examples/04-container/, packages/ or docs/integrate/, and on the weekly and manual runs;
+  # - the weekly schedule and manual runs run everything: both pythons, minimum-versions, quickstart and the container job.
   changes:
     name: changes (which heavy jobs this event runs)
     runs-on: ubuntu-latest
@@ -38,6 +40,7 @@ jobs:
       suite: ${{ steps.diff.outputs.suite }}
       targets: ${{ steps.diff.outputs.targets }}
       minimum_versions: ${{ steps.diff.outputs.minimum_versions }}
+      container: ${{ steps.diff.outputs.container }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -68,15 +71,22 @@ jobs:
               if grep -Eq '^packages/[^/]+/pyproject\.toml$' <<<"$changed"; then
                 minimum=true
               fi
+              # the container job builds example 04's image: it runs when a path it builds from or documents changes
+              container=false
+              if grep -Eq '^(examples/04-container/|packages/|docs/integrate/)' <<<"$changed"; then
+                container=true
+              fi
               ;;
             push)
               # main after a merge: the pull request ran the tests on this code; the weekly run covers drift
               suite=none
               minimum=false
+              container=false
               ;;
             *)
               suite=full
               minimum=true
+              container=true
               ;;
           esac
           case "$suite" in none|tools|full) ;; *) suite=full ;; esac
@@ -87,7 +97,8 @@ jobs:
           echo "suite=${suite}" >> "$GITHUB_OUTPUT"
           echo "targets=${targets}" >> "$GITHUB_OUTPUT"
           echo "minimum_versions=${minimum}" >> "$GITHUB_OUTPUT"
-          echo "tests: ${suite} (${targets}); minimum-versions: ${minimum}"
+          echo "container=${container}" >> "$GITHUB_OUTPUT"
+          echo "tests: ${suite} (${targets}); minimum-versions: ${minimum}; container: ${container}"
 
   tests:
     name: tests (python ${{ matrix.python-version }})
@@ -114,7 +125,7 @@ jobs:
       - name: Install every package (editable) with its dev and parquet extras, ruff for the lint tests, xdist for -n, build and twine for the README check
         if: needs.changes.outputs.suite != 'none'
         run: |
-          python -m pip install "ruff==0.17.3" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0" \
+          python -m pip install "ruff==0.17.3" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0" "pyyaml==6.0.3" "jsonschema==4.26.0" \
             -e "packages/meterline[dev,parquet]" \
             -e "packages/meterline-anthropic[dev,parquet]" \
             -e "packages/meterline-anthropic-admin[dev,parquet]" \
@@ -159,7 +170,7 @@ jobs:
           python-version: "3.10"
       - name: Install every package with the lowest version of each declared dependency
         run: |
-          python -m pip install "uv==0.12.19" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0"
+          python -m pip install "uv==0.12.19" "pytest-xdist==3.8.0" "build==1.6.1" "twine==7.0.0" "pyyaml==6.0.3"
           uv pip install --system --resolution lowest-direct \
             -e "packages/meterline[dev,parquet]" \
             -e "packages/meterline-anthropic[dev,parquet]" \
@@ -228,12 +239,77 @@ jobs:
       - name: Run the "Run it" block of each example (simulated data and the connectors' fake APIs, no key)
         run: |
           .venv/bin/python -m pip install tomli
-          for readme in examples/01-sim-to-kpis/README.md examples/02-exec-report/README.md examples/03-daily-job/README.md; do
-            rm -rf sim-out gold exec-report.html job-data
+          for readme in examples/01-sim-to-kpis/README.md examples/02-exec-report/README.md examples/03-daily-job/README.md examples/05-dashboard/README.md examples/06-warehouse-duckdb/README.md examples/07-person-messages/README.md; do
+            rm -rf sim-out gold exec-report.html job-data dashboard-root warehouse-demo messages-demo mail-out mail-out-refused
             python tools/readme_block.py "Run it" --readme "$readme" > "$RUNNER_TEMP/example.sh"
             cat "$RUNNER_TEMP/example.sh"
             bash -euxo pipefail "$RUNNER_TEMP/example.sh"
           done
+
+  container:
+    # Example 04: build the image, run the job on simulated data until a published gold folder exists, and check that the image
+    # holds this repository's meterline versions and no key. It names GitHub's hosted Ubuntu runner on purpose, outside the
+    # runner variables the other jobs use: that runner has Docker. No secret is read and no artifact is uploaded: the key used
+    # here is made inside the job and is not a secret.
+    name: container (example 04 image, simulated data)
+    needs: changes
+    if: needs.changes.outputs.container == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build the image from the repository root
+        run: docker build -f examples/04-container/Dockerfile -t meterline-job:local .
+      - name: Check that the image holds this repository's version of every meterline package
+        run: docker run --rm --entrypoint pip meterline-job:local list --format=json | python3 tools/check_image_versions.py
+      - name: Make a throwaway key for the run (it is not a secret)
+        # written to the job's environment file and never echoed; the checks below look for it in everything the image shows
+        run: echo "METERLINE_GOLD_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Run the "Run it" block of examples/04-container/README.md (the three steps on simulated data)
+        # no -x: a trace would echo the key into the log that the next steps search
+        run: |
+          set -euo pipefail
+          python3 tools/readme_block.py "Run it" --readme examples/04-container/README.md > "$RUNNER_TEMP/container.sh"
+          bash -eo pipefail "$RUNNER_TEMP/container.sh" 2>&1 | tee "$RUNNER_TEMP/container.log"
+      - name: Run the "Run it in the container" block of examples/05-dashboard/README.md (the dashboard on example 04's gold volume)
+        # its exit code counts: the block lists the manager keys and renders one manager's folder with --check; the server block is not run
+        run: |
+          set -euo pipefail
+          python3 tools/readme_block.py "Run it in the container" --readme examples/05-dashboard/README.md > "$RUNNER_TEMP/dashboard.sh"
+          bash -eo pipefail "$RUNNER_TEMP/dashboard.sh"
+      - name: Run the "Run it in the container" block of examples/06-warehouse-duckdb/README.md (the DuckDB files, on example 04's gold volume)
+        # its exit code counts: the block loads the warehouse files into a volume of their own and checks them
+        run: |
+          set -euo pipefail
+          python3 tools/readme_block.py "Run it in the container" --readme examples/06-warehouse-duckdb/README.md > "$RUNNER_TEMP/warehouse.sh"
+          bash -eo pipefail "$RUNNER_TEMP/warehouse.sh"
+      - name: Run the "Run it in the container" block of examples/07-person-messages/README.md (the messages, on example 04's gold volume)
+        # its exit code counts: the block writes the .eml files into a volume of their own and never passes --send
+        run: |
+          set -euo pipefail
+          python3 tools/readme_block.py "Run it in the container" --readme examples/07-person-messages/README.md > "$RUNNER_TEMP/messages.sh"
+          bash -eo pipefail "$RUNNER_TEMP/messages.sh"
+      - name: Force a failed run (a missing configuration) and keep its log
+        run: |
+          docker volume create meterline-empty >/dev/null
+          if docker run --rm -e METERLINE_GOLD_KEY -v meterline-empty:/config meterline-job:local run /config/job.toml > "$RUNNER_TEMP/failed.log" 2>&1; then
+            echo "the forced failed run exited 0" >&2
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/failed.log"
+      - name: The throwaway key is in no layer, no image setting and no log, on the success and on the failed run
+        run: |
+          docker history --no-trunc meterline-job:local > "$RUNNER_TEMP/history.txt"
+          docker image inspect meterline-job:local > "$RUNNER_TEMP/inspect.json"
+          python3 tools/check_image_key.py METERLINE_GOLD_KEY "$RUNNER_TEMP/history.txt" "$RUNNER_TEMP/inspect.json" \
+            "$RUNNER_TEMP/container.log" "$RUNNER_TEMP/failed.log"
+      - name: Run the "Clean up" block of examples/04-container/README.md (remove the volumes)
+        run: |
+          set -euo pipefail
+          python3 tools/readme_block.py "Clean up" --readme examples/04-container/README.md > "$RUNNER_TEMP/clean-up.sh"
+          bash -eo pipefail "$RUNNER_TEMP/clean-up.sh"
 
   audit:
     name: dependency audit (pip-audit)

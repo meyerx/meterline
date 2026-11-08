@@ -22,5 +22,6 @@ included:
   - {provider: github_copilot, product: copilot_cli}
   - {provider: github_copilot, product: copilot_app}
 seats:
-  - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "27.00", included_credits: null}
+  # Commented out on purpose: a seat line with no provider_account_id matches every Anthropic organisation, and a Console organisation has no seats.
+  # - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "27.00", included_credits: null}
   - {provider: github_copilot, provider_account_id: null, valid_from: "2000-01-01", per_month: "23.00", included_credits: "1500"}

@@ -1,0 +1,37 @@
+{
+  "family": "meterline-job",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::000000000001:role/meterline-execution",
+  "taskRoleArn": "arn:aws:iam::000000000001:role/meterline-task",
+  "containerDefinitions": [
+    {
+      "name": "meterline-job",
+      "image": "000000000001.dkr.ecr.eu-west-1.amazonaws.com/meterline-job:0.1.0",
+      "essential": true,
+      "user": "10001",
+      "entryPoint": ["meterline-job"],
+      "command": ["run", "/config/job.toml"],
+      "secrets": [
+        {"name": "METERLINE_GOLD_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:000000000001:secret:meterline/gold-key"},
+        {"name": "ANTHROPIC_ADMIN_KEY", "valueFrom": "arn:aws:secretsmanager:eu-west-1:000000000001:secret:meterline/anthropic-admin-key"}
+      ],
+      "mountPoints": [
+        {"sourceVolume": "data", "containerPath": "/data", "readOnly": false},
+        {"sourceVolume": "gold", "containerPath": "/gold", "readOnly": false},
+        {"sourceVolume": "config", "containerPath": "/config", "readOnly": true}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {"awslogs-group": "/meterline/job", "awslogs-region": "eu-west-1", "awslogs-stream-prefix": "job"}
+      }
+    }
+  ],
+  "volumes": [
+    {"name": "data", "efsVolumeConfiguration": {"fileSystemId": "fs-0123456789abcdef0", "rootDirectory": "/data", "transitEncryption": "ENABLED"}},
+    {"name": "gold", "efsVolumeConfiguration": {"fileSystemId": "fs-0123456789abcdef0", "rootDirectory": "/gold", "transitEncryption": "ENABLED"}},
+    {"name": "config", "efsVolumeConfiguration": {"fileSystemId": "fs-0123456789abcdef0", "rootDirectory": "/config", "transitEncryption": "ENABLED"}}
+  ]
+}

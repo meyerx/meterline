@@ -42,6 +42,19 @@
       "x-hidden-covered": false,
       "x-unit": "count"
     },
+    "is_final": {
+      "description": "True when the month is complete. The seat fee of a running month is the full month's fee.",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "bool",
+      "x-hidden-covered": false,
+      "x-unit": "flag"
+    },
     "month": {
       "description": "Calendar month, YYYY-MM.",
       "pattern": "^[0-9]{4}-[0-9]{2}$",
@@ -51,6 +64,15 @@
       "x-gold-type": "text",
       "x-hidden-covered": false,
       "x-unit": "month"
+    },
+    "month_status": {
+      "description": "complete for a finished month, running for the month in progress.",
+      "type": [
+        "string"
+      ],
+      "x-gold-type": "text",
+      "x-hidden-covered": false,
+      "x-unit": "text"
     },
     "provider": {
       "description": "Provider the usage or seats came from, as the silver records name it.",
@@ -74,7 +96,7 @@
     "schema_version": {
       "description": "GOLD_SCHEMA_VERSION of the build that wrote the file; the same on every row.",
       "enum": [
-        "2.0"
+        "2.1"
       ],
       "type": [
         "string"
@@ -160,7 +182,9 @@
     "seats_reported_max",
     "seat_price",
     "seat_cost",
-    "currency"
+    "currency",
+    "month_status",
+    "is_final"
   ],
   "title": "gold-dataset-seats_month",
   "type": "object",
@@ -181,7 +205,9 @@
     "seats_reported_max",
     "seat_price",
     "seat_cost",
-    "currency"
+    "currency",
+    "month_status",
+    "is_final"
   ],
   "x-cost-column-rule": "`seat_cost` is a fee, not usage. Add it to usage only through `costs_month.total_cost_ref`.",
   "x-dataset": "seats_month",

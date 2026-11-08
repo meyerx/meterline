@@ -192,8 +192,9 @@ def test_a_wrong_expected_cost_is_caught(vertical):
 
 @pytest.fixture(scope="module")
 def admin_gold(tmp_path_factory):
-    """Gold built from the Admin connector's fake, with the example price list (a provider-wide anthropic seat line)
-    and the simulator's organisation files, whose identities name the anthropic provider: examples/03-daily-job's way."""
+    """Gold built from the Admin connector's fake, with the example price list with its provider-wide anthropic seat line
+    switched on (the example list ships it commented out) and the simulator's organisation files, whose identities name the
+    anthropic provider: what an adopter who copies the list and enables the line gets, examples/03-daily-job's way."""
     admin = pytest.importorskip("meterline_anthropic_admin")
     fake = pytest.importorskip("meterline_anthropic_admin.testing")
     run = meterline_sim.generate(preset="tiny", seed=7, months=6, out=tmp_path_factory.mktemp("e4a_sim"))
@@ -205,7 +206,12 @@ def admin_gold(tmp_path_factory):
                            provider_account_id="my-org")
     assert result.ok, result
     out = tmp_path_factory.mktemp("e4a_gold") / "gold"
-    meterline_gold.build(silver=data_dir, org=Path(run) / "org", policy=BASE / "policy.example.yaml", prices=PRICES,
+    text = PRICES.read_text(encoding="utf-8")
+    line = '# - {provider: anthropic, provider_account_id: null, valid_from: "2000-01-01", per_month: "27.00", included_credits: null}'
+    assert line in text
+    with_seats = tmp_path_factory.mktemp("e4a_prices") / "prices.yaml"
+    with_seats.write_text(text.replace(line, line[2:]), encoding="utf-8")
+    meterline_gold.build(silver=data_dir, org=Path(run) / "org", policy=BASE / "policy.example.yaml", prices=with_seats,
                          key=KEY, out=out)
     return out
 

@@ -1,2 +1,2 @@
 schema_version,month,cell_id,cell_kind,cell_key,depth,parent_cell_id,persons,active_persons,active_days,cost_ref,p50_cost_ref,p75_cost_ref,p90_cost_ref,p99_cost_ref,top_decile_share,is_final,hidden
-2.0,2026-05,unit:u03,unit,u03,2,unit:u01,,,,,,,,,,,true
+2.1,2026-05,unit:u03,unit,u03,2,unit:u01,,,,,,,,,,,true

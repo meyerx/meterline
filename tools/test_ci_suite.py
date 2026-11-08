@@ -168,15 +168,33 @@ def _commit(repo, message="change"):
     return _git(repo, "rev-parse", "HEAD")
 
 
-@pytest.mark.parametrize("event, suite, minimum", [
-    ("push", "none", "false"),
-    ("schedule", "full", "true"),
-    ("workflow_dispatch", "full", "true"),
+@pytest.mark.parametrize("event, suite, minimum, container", [
+    ("push", "none", "false", "false"),
+    ("schedule", "full", "true", "true"),
+    ("workflow_dispatch", "full", "true", "true"),
 ])
-def test_changes_job_outside_pull_requests(pr_repo, event, suite, minimum):
+def test_changes_job_outside_pull_requests(pr_repo, event, suite, minimum, container):
     repo, _ = pr_repo
     outputs = _run_changes(repo, event)
-    assert (outputs["suite"], outputs["minimum_versions"]) == (suite, minimum)
+    assert (outputs["suite"], outputs["minimum_versions"], outputs["container"]) == (suite, minimum, container)
+
+
+@pytest.mark.parametrize("path, container", [
+    ("examples/04-container/Dockerfile", "true"),
+    ("packages/meterline-x/src/meterline_x/__init__.py", "true"),
+    ("docs/integrate/README.md", "true"),
+    ("README.md", "false"),
+    ("docs/guide.md", "false"),
+    ("examples/05-dashboard/dashboard.py", "false"),
+    ("tools/ci_suite.py", "false"),
+])
+def test_changes_job_container_output_follows_the_changed_paths(pr_repo, path, container):
+    """The path rule of the container job, run on sample paths: each of the three trees triggers it, a README alone does not."""
+    repo, base = pr_repo
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("changed\n", encoding="utf-8")
+    assert _run_changes(repo, "pull_request", base, _commit(repo))["container"] == container
 
 
 def test_changes_job_prose_only_pull_request(pr_repo):
@@ -264,3 +282,14 @@ def test_the_heavy_jobs_follow_the_suite_and_the_long_ones_run_weekly_and_manual
 
 def test_a_merge_never_replaces_a_pending_weekly_or_manual_run():
     assert "github.event_name" in _ci()["concurrency"]["group"]
+
+
+def test_a_prose_only_pull_request_on_the_integrate_pages_still_runs_the_integrate_tests():
+    """A pull request that changes only pages under docs/integrate/ runs the whole tools folder, which holds
+    tools/test_integrate_docs.py: the narrower suite when no package test reads the page, the full suite when one does (a bare
+    README.md is read by a package test). The yaml beside the pages is not prose and gives the full suite."""
+    assert ci_suite.suite(["docs/integrate/b-kubernetes.md", "docs/integrate/e-agents.md"]) == "tools"
+    assert ci_suite.suite(["docs/integrate/README.md"]) in ("tools", "full")
+    assert ci_suite.suite(["docs/integrate/scenarios.yaml"]) == "full"
+    assert ci_suite.tools_targets()[0] == "tools"
+    assert os.path.isfile(os.path.join(ROOT, "tools", "test_integrate_docs.py"))

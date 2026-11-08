@@ -564,3 +564,55 @@ def test_releasing_guide_sits_between_scan_limits_and_publishing_and_step_3_expo
     assert all(i >= 0 for i in order) and order == sorted(order)
     step_3 = text.split("\n3. Check the tools", 1)[1].split("\n4. Create the empty public repository", 1)[0]
     assert "--tag export/v0.1" in step_3 and "Export-Tag:" in step_3
+
+
+# ---- v0.3 hardening C-3: a contributor's commit cannot move the baseline -------------------------------------------------
+
+OTHER = "someone@example.com"
+
+
+def _merged_contributor_commit(w, trailer="Export-Tag: export/v0.9"):
+    """On the public clone: a contributor branch with a commit that carries an Export-Tag line, changes docs/guide.md and is
+    merged into the branch the clone is on (a merge commit by the maintainer). Returns the maintainer's export commit."""
+    export_commit = _git(w.clone, "rev-parse", "HEAD")
+    branch = _git(w.clone, "branch", "--show-current")
+    _git(w.clone, "checkout", "-q", "-b", "contributor")
+    _step(w.clone, "A contribution\n\n" + trailer, {"docs/guide.md": "guide, improved by a contributor\n"},
+          env={"GIT_AUTHOR_EMAIL": OTHER, "GIT_COMMITTER_EMAIL": OTHER})
+    _git(w.clone, "checkout", "-q", branch)
+    _git(w.clone, "merge", "-q", "--no-ff", "-m", "Merge pull request 1 from contributor", "contributor")
+    return export_commit
+
+
+def test_the_baseline_stays_the_maintainers_export_commit_when_a_merged_commit_carries_the_trailer(tmp_path):
+    w = _world(tmp_path)
+    export_commit = _merged_contributor_commit(w)
+    assert ep.last_export_commit(str(w.clone), EMAIL) == export_commit
+
+
+def test_the_ignored_commit_is_named_in_one_notice_line(tmp_path, capsys):
+    w = _world(tmp_path)
+    _merged_contributor_commit(w)
+    contributor = _git(w.clone, "rev-parse", "contributor")
+    ep.last_export_commit(str(w.clone), EMAIL)
+    notices = [line for line in capsys.readouterr().out.splitlines() if line.startswith("notice:")]
+    assert len(notices) == 1 and contributor[:12] in notices[0] and "first-parent" in notices[0]
+
+
+def test_a_first_parent_commit_by_another_author_with_the_trailer_is_ignored_too(tmp_path, capsys):
+    w = _world(tmp_path)
+    export_commit = _git(w.clone, "rev-parse", "HEAD")
+    _step(w.clone, "Looks like an export\n\nExport-Tag: export/v0.9", {"docs/guide.md": "changed\n"},
+          env={"GIT_AUTHOR_EMAIL": OTHER, "GIT_COMMITTER_EMAIL": OTHER})
+    assert ep.last_export_commit(str(w.clone), EMAIL) == export_commit
+    assert "its author is not the maintainer" in capsys.readouterr().out
+
+
+def test_a_change_merged_on_the_public_side_still_stops_the_next_export_as_diverged(tmp_path, capsys):
+    """With the baseline on the contributor's commit the change looked like part of the last export, and the new commit
+    silently undid it."""
+    w = _world(tmp_path)
+    _merged_contributor_commit(w)
+    code = w.onto()
+    out = capsys.readouterr().out
+    assert code == 1 and "DIVERGED  docs/guide.md" in out

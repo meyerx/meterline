@@ -43,7 +43,7 @@ def test_every_package_declares_the_licence_and_ships_it():
         assert re.search(r'^license = "Apache-2\.0"$', meta, re.M), pkg
         assert re.search(r'^license-files = \["LICENSE"\]$', meta, re.M), pkg
         # PEP 639 license expressions need setuptools 77.0.0 or later
-        assert 'requires = ["setuptools>=77"]' in meta, pkg
+        assert re.search(r'requires = \["setuptools==\d+(\.\d+)*"\]', meta), pkg  # an exact pin (v0.3 hardening, C-2)
         # license-files globs are relative to the package directory, so each carries a copy
         assert read("packages", pkg, "LICENSE") == root_licence, pkg
 
